@@ -9,8 +9,8 @@ generator client {
 // enough when changing adapters.
 // See https://www.prisma.io/docs/orm/reference/prisma-schema-reference#string for more information
 datasource db {
-  provider = "sqlite"
-  url      = "file:dev.sqlite"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model Session {
@@ -31,4 +31,89 @@ model Session {
   emailVerified Boolean?  @default(false)
   refreshToken        String?
   refreshTokenExpires DateTime?
+}
+
+enum InventoryCountStatus {
+  DRAFT
+  COUNTING
+  REVIEW
+  COMPLETED
+  CANCELLED
+}
+
+enum InventoryLineStatus {
+  UNCOUNTED
+  COUNTED
+  RECOUNT
+  APPROVED
+  EXCLUDED
+}
+
+model InventoryCount {
+  id           String               @id @default(cuid())
+  shop         String
+  name         String
+  locationId   String
+  locationName String
+  status       InventoryCountStatus @default(DRAFT)
+  createdBy    String?
+  startedAt    DateTime?
+  completedAt  DateTime?
+  notes        String?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  lines        InventoryCountLine[]
+  scanEvents   InventoryScanEvent[]
+
+  @@index([shop, locationId])
+  @@index([shop, status])
+}
+
+model InventoryCountLine {
+  id                 String              @id @default(cuid())
+  inventoryCountId   String
+  inventoryItemId    String
+  productId          String
+  variantId          String
+  productTitle       String
+  variantTitle       String?
+  vendor             String?
+  productType        String?
+  sku                String?
+  barcode            String?
+  startingQuantity   Int?
+  countedQuantity    Int                 @default(0)
+  approvedQuantity   Int?
+  status             InventoryLineStatus @default(UNCOUNTED)
+  note               String?
+  firstScannedAt     DateTime?
+  lastScannedAt      DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  inventoryCount     InventoryCount      @relation(fields: [inventoryCountId], references: [id], onDelete: Cascade)
+  scanEvents         InventoryScanEvent[]
+
+  @@unique([inventoryCountId, inventoryItemId])
+  @@index([inventoryCountId])
+  @@index([barcode])
+  @@index([status])
+}
+
+model InventoryScanEvent {
+  id                   String              @id @default(cuid())
+  inventoryCountId     String
+  inventoryCountLineId String?
+  barcode              String
+  quantityChange       Int                 @default(1)
+  scannedBy            String?
+  scannedAt            DateTime            @default(now())
+  deviceId             String?
+  result               String
+  errorMessage         String?
+  inventoryCount       InventoryCount      @relation(fields: [inventoryCountId], references: [id], onDelete: Cascade)
+  inventoryCountLine   InventoryCountLine? @relation(fields: [inventoryCountLineId], references: [id], onDelete: SetNull)
+
+  @@index([inventoryCountId])
+  @@index([barcode])
+  @@index([scannedAt])
 }

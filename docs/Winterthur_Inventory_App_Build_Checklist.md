@@ -2,15 +2,15 @@
 
 ## Phase 1 -- Safe Counting MVP
 
--   [ ] Create Shopify embedded app
--   [ ] Connect Neon PostgreSQL
--   [ ] Configure Prisma models
+-   [x] Create Shopify embedded app
+-   [x] Connect Neon PostgreSQL
+-   [x] Configure Prisma models
 -   [ ] Add Shopify authentication
--   [ ] Request scopes:
-    -   [ ] read_products
-    -   [ ] read_inventory
-    -   [ ] write_inventory
-    -   [ ] read_locations
+-   [x] Request scopes:
+    -   [x] read_products
+    -   [x] read_inventory
+    -   [x] write_inventory
+    -   [x] read_locations
 -   [ ] Create Inventory Count session page
 -   [ ] Select Shopify location
 -   [ ] Barcode scan screen
