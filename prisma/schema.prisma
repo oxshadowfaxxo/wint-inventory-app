@@ -62,6 +62,7 @@ model InventoryCount {
   createdBy    String?
   startedAt    DateTime?
   completedAt  DateTime?
+  archivedAt   DateTime?
   notes        String?
   createdAt    DateTime             @default(now())
   updatedAt    DateTime             @updatedAt
@@ -70,6 +71,7 @@ model InventoryCount {
 
   @@index([shop, locationId])
   @@index([shop, status])
+  @@index([shop, archivedAt])
   @@unique([shop, countNumber])
 }
 

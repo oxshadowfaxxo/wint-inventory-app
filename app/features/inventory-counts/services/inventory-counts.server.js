@@ -4,11 +4,14 @@ const countSelect = {
   id: true,
   countNumber: true,
   name: true,
+  locationId: true,
   locationName: true,
+  area: true,
   status: true,
   createdBy: true,
   startedAt: true,
   completedAt: true,
+  archivedAt: true,
   updatedAt: true,
   lines: {
     select: {
@@ -28,26 +31,11 @@ const countSelect = {
 };
 
 export async function getInventoryCounts(shop) {
-  const [currentCounts, historyCounts] = await Promise.all([
-    prisma.inventoryCount.findMany({
-      where: {
-        shop,
-        status: { in: ["DRAFT", "COUNTING", "REVIEW"] },
-      },
-      orderBy: [{ updatedAt: "desc" }, { startedAt: "desc" }],
-      select: countSelect,
-    }),
-    prisma.inventoryCount.findMany({
-      where: {
-        shop,
-        status: { in: ["COMPLETED", "CANCELLED"] },
-      },
-      orderBy: [{ completedAt: "desc" }, { updatedAt: "desc" }],
-      select: countSelect,
-    }),
-  ]);
-
-  return { currentCounts, historyCounts };
+  return prisma.inventoryCount.findMany({
+    where: { shop },
+    orderBy: [{ updatedAt: "desc" }, { createdAt: "desc" }],
+    select: countSelect,
+  });
 }
 
 export async function getInventoryCount(shop, countId) {
@@ -61,16 +49,19 @@ export async function getInventoryCount(shop, countId) {
       countNumber: true,
       name: true,
       status: true,
+      locationId: true,
       locationName: true,
       area: true,
       productTypes: true,
       createdBy: true,
       startedAt: true,
       completedAt: true,
+      archivedAt: true,
       notes: true,
       lines: {
         select: {
           id: true,
+          variantId: true,
           productTitle: true,
           variantTitle: true,
           sku: true,

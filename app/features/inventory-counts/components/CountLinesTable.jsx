@@ -1,6 +1,8 @@
 /* eslint-disable react/prop-types */
 
 import styles from "./count-lines-table.module.css";
+import { SortableTableHeader } from "./SortableTableHeader";
+import { useInventoryCountSort } from "../hooks/useInventoryCountSort";
 
 function formatVariance(countedQuantity, startingQuantity) {
   const variance = countedQuantity - (startingQuantity ?? 0);
@@ -9,29 +11,26 @@ function formatVariance(countedQuantity, startingQuantity) {
 }
 
 export function CountLinesTable({ lines }) {
+  const { sort, sortedLines, toggleSort, resetSort } = useInventoryCountSort(lines);
   return (
-    <div className={styles.container}>
-      <table className={styles.table}>
-        <thead>
-          <tr>
-            <th scope="col">Product</th>
-            <th scope="col">Variant</th>
-            <th scope="col">SKU</th>
-            <th scope="col">Barcode</th>
-            <th scope="col" className={styles.number}>
-              Expected
-            </th>
-            <th scope="col" className={styles.number}>
-              Counted
-            </th>
-            <th scope="col" className={styles.number}>
-              Variance
-            </th>
-            <th scope="col">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {lines.map((line) => (
+    <s-stack direction="block" gap="base">
+      {sort && <s-button onClick={resetSort}>Reset Sort</s-button>}
+      <div className={styles.container}>
+        <table className={styles.table}>
+          <thead>
+            <tr>
+              <SortableTableHeader column="product" label="Product" sort={sort} onSort={toggleSort} />
+              <SortableTableHeader column="variant" label="Variant" sort={sort} onSort={toggleSort} />
+              <SortableTableHeader column="sku" label="SKU" sort={sort} onSort={toggleSort} />
+              <SortableTableHeader column="barcode" label="Barcode" sort={sort} onSort={toggleSort} />
+              <SortableTableHeader column="expected" label="Expected" sort={sort} onSort={toggleSort} className={styles.number} />
+              <SortableTableHeader column="counted" label="Counted" sort={sort} onSort={toggleSort} className={styles.number} />
+              <SortableTableHeader column="variance" label="Variance" sort={sort} onSort={toggleSort} className={styles.number} />
+              <SortableTableHeader column="status" label="Status" sort={sort} onSort={toggleSort} />
+            </tr>
+          </thead>
+          <tbody>
+          {sortedLines.map((line) => (
             <tr key={line.id}>
               <td className={styles.product}>{line.productTitle}</td>
               <td>{line.variantTitle || "—"}</td>
@@ -55,8 +54,9 @@ export function CountLinesTable({ lines }) {
               </td>
             </tr>
           ))}
-        </tbody>
-      </table>
-    </div>
+          </tbody>
+        </table>
+      </div>
+    </s-stack>
   );
 }

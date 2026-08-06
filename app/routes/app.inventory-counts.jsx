@@ -1,13 +1,12 @@
 import { Outlet, useLoaderData, useLocation, useParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
-import {
-  CurrentCountRow,
-  CurrentCountsHeader,
-} from "../features/inventory-counts/components/CurrentCountRow";
-import { CountHistoryRow } from "../features/inventory-counts/components/CountHistoryRow";
-import currentCountStyles from "../features/inventory-counts/components/current-counts.module.css";
+import { AllCountsTable } from "../features/inventory-counts/components/AllCountsTable";
 import { getInventoryCounts } from "../features/inventory-counts/services/inventory-counts.server";
+import {
+  friendlyWorkflowError,
+  setInventoryCountArchived,
+} from "../features/inventory-counts/services/inventory-count-workflow.server";
 import {
   calculateCountProgress,
   calculateVariance,
@@ -16,28 +15,15 @@ import {
 
 export const loader = async ({ request }) => {
   const { session } = await authenticate.admin(request);
-  const { currentCounts, historyCounts } = await getInventoryCounts(
-    session.shop,
-  );
-
+  const counts = await getInventoryCounts(session.shop);
   return {
-    currentCounts: currentCounts.map((count) => ({
-      ...count,
-      progress: calculateCountProgress(count.lines),
-      lastActivity: getLastActivity(count),
-      lines: undefined,
-      scanEvents: undefined,
-    })),
-    historyCounts: historyCounts.map((count) => {
+    counts: counts.map((count) => {
       const progress = calculateCountProgress(count.lines);
-
       return {
         ...count,
         progress,
-        variance: calculateVariance(
-          progress.quantityCounted,
-          progress.totalQuantity,
-        ),
+        variance: calculateVariance(progress.quantityCounted, progress.totalQuantity),
+        lastActivity: getLastActivity(count),
         lines: undefined,
         scanEvents: undefined,
       };
@@ -45,49 +31,39 @@ export const loader = async ({ request }) => {
   };
 };
 
+export const action = async ({ request }) => {
+  const { session } = await authenticate.admin(request);
+  const formData = await request.formData();
+  const intent = String(formData.get("intent") || "");
+  const countId = String(formData.get("countId") || "");
+  try {
+    if (!countId) return { error: "Inventory count not found." };
+    if (intent !== "archive" && intent !== "unarchive") {
+      return { error: "Choose a valid archive action." };
+    }
+    await setInventoryCountArchived({
+      shop: session.shop,
+      countId,
+      archived: intent === "archive",
+    });
+    return { success: true };
+  } catch (error) {
+    return { error: friendlyWorkflowError(error) };
+  }
+};
+
 export default function InventoryCountsPage() {
   const { countId } = useParams();
   const location = useLocation();
-  const { currentCounts, historyCounts } = useLoaderData();
+  const { counts } = useLoaderData();
 
-  if (countId || location.pathname.endsWith("/new")) {
-    return <Outlet />;
-  }
+  if (countId || location.pathname.endsWith("/new")) return <Outlet />;
 
   return (
     <s-page heading="Inventory Counts">
-      <s-section>
-        <s-stack direction="inline" gap="base">
-          <s-button disabled>Search</s-button>
-          <s-button variant="primary" href="/app/inventory-counts/new">
-            New Count
-          </s-button>
-        </s-stack>
-      </s-section>
-
-      <s-section heading="Current Counts">
-        {currentCounts.length === 0 ? (
-          <s-paragraph>No current inventory counts.</s-paragraph>
-        ) : (
-          <div className={currentCountStyles.table}>
-            <CurrentCountsHeader />
-            {currentCounts.map((count) => (
-              <CurrentCountRow key={count.id} count={count} />
-            ))}
-          </div>
-        )}
-      </s-section>
-
-      <s-section heading="Count History">
-        {historyCounts.length === 0 ? (
-          <s-paragraph>No inventory count history.</s-paragraph>
-        ) : (
-          <s-stack direction="block" gap="base">
-            {historyCounts.map((count) => (
-              <CountHistoryRow key={count.id} count={count} />
-            ))}
-          </s-stack>
-        )}
+      <s-button slot="primary-action" variant="primary" href="/app/inventory-counts/new">New Count</s-button>
+      <s-section heading="All Counts">
+        <AllCountsTable counts={counts} />
       </s-section>
     </s-page>
   );

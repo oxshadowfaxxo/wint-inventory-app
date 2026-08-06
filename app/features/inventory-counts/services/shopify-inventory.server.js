@@ -197,3 +197,141 @@ export function summarizeSnapshot(lines) {
     withoutSkus: lines.filter((line) => !line.sku).length,
   };
 }
+
+const ADD_PRODUCT_VARIANTS_QUERY = `#graphql
+  query AddProductVariants($query: String!, $locationId: ID!) {
+    productVariants(first: 20, query: $query) {
+      nodes {
+        id
+        title
+        sku
+        barcode
+        product { id title productType vendor status }
+        inventoryItem {
+          id
+          tracked
+          inventoryLevel(locationId: $locationId) {
+            quantities(names: ["on_hand"]) { name quantity }
+          }
+        }
+      }
+    }
+  }
+`;
+
+const ADD_PRODUCT_VARIANT_QUERY = `#graphql
+  query AddProductVariant($variantId: ID!, $locationId: ID!) {
+    productVariant(id: $variantId) {
+      id
+      title
+      sku
+      barcode
+      product { id title productType vendor status }
+      inventoryItem {
+        id
+        tracked
+        inventoryLevel(locationId: $locationId) {
+          quantities(names: ["on_hand"]) { name quantity }
+        }
+      }
+    }
+  }
+`;
+
+function quoteSearchValue(value) {
+  return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+function normalizeAddProductVariant(variant) {
+  const inventoryLevel = variant.inventoryItem?.inventoryLevel;
+  const onHandEntry = inventoryLevel?.quantities?.find(
+    (entry) => entry.name === "on_hand",
+  );
+  if (
+    variant.product.status !== "ACTIVE" ||
+    !variant.inventoryItem?.tracked ||
+    !inventoryLevel ||
+    !Number.isInteger(onHandEntry?.quantity)
+  ) {
+    return null;
+  }
+  return {
+    inventoryItemId: variant.inventoryItem.id,
+    productId: variant.product.id,
+    variantId: variant.id,
+    productTitle: variant.product.title,
+    variantTitle: variant.title || null,
+    vendor: variant.product.vendor || null,
+    productType: variant.product.productType?.trim() || null,
+    sku: variant.sku?.trim() || null,
+    barcode: variant.barcode?.trim() || null,
+    startingQuantity: onHandEntry.quantity,
+  };
+}
+
+async function searchVariants(admin, locationId, searchQuery) {
+  const data = await graphql(admin, ADD_PRODUCT_VARIANTS_QUERY, {
+    query: searchQuery,
+    locationId,
+  });
+  return data.productVariants.nodes;
+}
+
+export async function searchShopifyVariants(admin, locationId, rawSearch) {
+  const search = rawSearch.trim();
+  if (!search) return [];
+  const quoted = quoteSearchValue(search);
+  const queries = [
+    `product_status:active AND barcode:${quoted}`,
+    `product_status:active AND sku:${quoted}`,
+  ];
+  if (search.length >= 2) {
+    queries.push(`product_status:active AND title:${quoted}*`);
+  }
+  const groups = await Promise.all(
+    queries.map((query) => searchVariants(admin, locationId, query)),
+  );
+  const results = [];
+  const seen = new Set();
+  for (const group of groups) {
+    for (const variant of group) {
+      if (seen.has(variant.id)) continue;
+      const normalized = normalizeAddProductVariant(variant);
+      if (!normalized) continue;
+      seen.add(variant.id);
+      results.push(normalized);
+      if (results.length === 20) return results;
+    }
+  }
+  return results;
+}
+
+export async function getShopifyVariantForAddition(admin, locationId, variantId) {
+  const data = await graphql(admin, ADD_PRODUCT_VARIANT_QUERY, {
+    variantId,
+    locationId,
+  });
+  const variant = data.productVariant;
+  if (!variant || variant.product.status !== "ACTIVE") {
+    const error = new Error("Product is no longer active.");
+    error.userMessage = "Product is no longer active.";
+    throw error;
+  }
+  if (!variant.inventoryItem?.tracked) {
+    const error = new Error("Inventory tracking is disabled.");
+    error.userMessage = "Inventory tracking is not enabled for this product.";
+    throw error;
+  }
+  if (!variant.inventoryItem.inventoryLevel) {
+    const error = new Error("Variant is not stocked at the count location.");
+    error.userMessage = "Product is not stocked at this location.";
+    throw error;
+  }
+  const normalized = normalizeAddProductVariant(variant);
+  if (!normalized) {
+    const error = new Error("Missing Shopify on_hand quantity.");
+    error.userMessage = "Shopify on-hand quantity could not be loaded.";
+    throw error;
+  }
+  return normalized;
+}

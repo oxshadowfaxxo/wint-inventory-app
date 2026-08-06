@@ -6,14 +6,22 @@ import {
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
-import { CountLinesTable } from "../features/inventory-counts/components/CountLinesTable";
+import { CountingProductsTable } from "../features/inventory-counts/components/CountingProductsTable";
+import { AddProductSearch } from "../features/inventory-counts/components/AddProductSearch";
 import { getInventoryCount } from "../features/inventory-counts/services/inventory-counts.server";
 import {
   cancelInventoryCount,
   finishInventoryCount,
   friendlyWorkflowError,
   transitionInventoryCount,
+  updateInventoryLineQuantity,
+  addProductToInventoryCount,
+  removeInventoryCountLines,
 } from "../features/inventory-counts/services/inventory-count-workflow.server";
+import {
+  getShopifyVariantForAddition,
+  searchShopifyVariants,
+} from "../features/inventory-counts/services/shopify-inventory.server";
 import { calculateCountProgress } from "../features/inventory-counts/utils/inventory-count-progress";
 import { formatInventoryCountNumber } from "../features/inventory-counts/utils/inventory-count-number";
 
@@ -41,12 +49,59 @@ export const loader = async ({ request, params }) => {
 };
 
 export const action = async ({ request, params }) => {
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "");
   const countId = params.countId;
   if (!countId) return { error: "Inventory count not found." };
   try {
+    if (formData.get("countId") && formData.get("countId") !== countId) {
+      return { error: "Inventory count not found." };
+    }
+    if (["increment-line", "decrement-line", "set-line-quantity"].includes(intent)) {
+      const line = await updateInventoryLineQuantity({
+        shop: session.shop,
+        countId,
+        lineId: String(formData.get("lineId") || ""),
+        intent,
+        submittedQuantity: formData.get("quantity"),
+      });
+      return { line };
+    }
+    if (intent === "remove-count-lines") {
+      const removedCount = await removeInventoryCountLines({
+        shop: session.shop,
+        countId,
+        lineIds: formData.getAll("lineIds").map(String),
+      });
+      return {
+        removedCount,
+        message: `${removedCount} ${removedCount === 1 ? "product" : "products"} removed from the count.`,
+      };
+    }
+    if (intent === "search-shopify") {
+      const count = await getInventoryCount(session.shop, countId);
+      if (!count || count.status !== "COUNTING") {
+        return { error: "This count is not in counting mode.", searched: true };
+      }
+      const search = String(formData.get("search") || "").trim();
+      if (!search) return { error: "Enter a Shopify product search.", searched: true };
+      const results = await searchShopifyVariants(admin, count.locationId, search);
+      return { results, searched: true };
+    }
+    if (intent === "add-product") {
+      const count = await getInventoryCount(session.shop, countId);
+      if (!count || count.status !== "COUNTING") {
+        return { error: "This count is not in counting mode." };
+      }
+      const variant = await getShopifyVariantForAddition(
+        admin,
+        count.locationId,
+        String(formData.get("variantId") || ""),
+      );
+      await addProductToInventoryCount({ shop: session.shop, countId, variant });
+      return { added: true };
+    }
     if (intent === "save") {
       await transitionInventoryCount({ shop: session.shop, countId, transition: "save" });
       return redirect(`/app/inventory-counts/${countId}`);
@@ -70,6 +125,14 @@ export const action = async ({ request, params }) => {
     }
     return { error: "Choose a valid inventory count action." };
   } catch (error) {
+    if (error.userMessage) {
+      console.error("Shopify Add Product validation failed", {
+        shop: session.shop,
+        countId,
+        message: error.message,
+      });
+      return { error: error.userMessage };
+    }
     return { error: friendlyWorkflowError(error) };
   }
 };
@@ -123,8 +186,13 @@ export default function InventoryCountCountingPage() {
       )}
 
       <s-section heading="Products">
-        <CountLinesTable lines={count.lines} />
+        <CountingProductsTable countId={count.id} lines={count.lines} />
       </s-section>
+
+      <AddProductSearch
+        countId={count.id}
+        existingVariantIds={count.lines.map((line) => line.variantId)}
+      />
 
       <s-section heading="Notes">
         <s-paragraph>{count.notes?.trim() || "No notes added."}</s-paragraph>

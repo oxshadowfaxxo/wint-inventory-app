@@ -75,3 +75,75 @@
   text-align: right;
   font-variant-numeric: tabular-nums;
 }
+
+.sortButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: inherit;
+  gap: 4px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  text-align: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.sortButton:focus-visible {
+  outline: 2px solid #005bd3;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.number .sortButton {
+  justify-content: flex-end;
+}
+
+.selectionCell {
+  position: sticky;
+  left: 0;
+  width: 44px;
+  min-width: 44px;
+  z-index: 2;
+  background: #fff;
+  text-align: center;
+}
+
+.table th.selectionCell {
+  z-index: 4;
+  background: #f7f7f7;
+}
+
+.table th.selectionCell,
+.table td.selectionCell {
+  width: 44px;
+  min-width: 44px;
+  max-width: 44px;
+  padding-left: 6px;
+  padding-right: 6px;
+}
+
+.productWithSelection {
+  position: sticky !important;
+  left: 44px !important;
+  width: 220px;
+  min-width: 220px;
+  z-index: 1;
+  background: #fff;
+  box-shadow: 1px 0 0 #d8d8d8;
+}
+
+.table th.productWithSelection {
+  z-index: 3;
+  background: #f7f7f7;
+}
+
+.selectedRow td,
+.selectedRow td:first-child,
+.selectedRow .productWithSelection {
+  background: #f1f8f5;
+}
