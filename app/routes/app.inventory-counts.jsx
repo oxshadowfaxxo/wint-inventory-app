@@ -1,4 +1,4 @@
-import { Outlet, useLoaderData, useParams } from "react-router";
+import { Outlet, useLoaderData, useLocation, useParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import {
@@ -47,9 +47,10 @@ export const loader = async ({ request }) => {
 
 export default function InventoryCountsPage() {
   const { countId } = useParams();
+  const location = useLocation();
   const { currentCounts, historyCounts } = useLoaderData();
 
-  if (countId) {
+  if (countId || location.pathname.endsWith("/new")) {
     return <Outlet />;
   }
 
@@ -58,7 +59,7 @@ export default function InventoryCountsPage() {
       <s-section>
         <s-stack direction="inline" gap="base">
           <s-button disabled>Search</s-button>
-          <s-button variant="primary" disabled>
+          <s-button variant="primary" href="/app/inventory-counts/new">
             New Count
           </s-button>
         </s-stack>

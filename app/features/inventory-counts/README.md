@@ -1,32 +1,32 @@
 # Inventory counts
 
-This feature provides inventory count list and placeholder detail pages for reviewing active and historical counts. Routes authenticate the Shopify admin request, scope database reads to the authenticated shop, and delegate querying, calculations, and presentation to feature modules.
+The authenticated inventory-count feature provides the list, two-step New Count workflow, dedicated counting mode, and read-only detail preview.
 
-## Folder structure
+## New Count workflow
 
-- `components/` contains the compact current count row, history row, detail product-lines table, and reusable progress display.
-- `services/` contains the server-only Prisma query.
-- `utils/` contains progress, variance, and last-activity calculations.
-- `app/routes/app.inventory-counts.jsx` is the thin route and loader integration.
-- `app/routes/app.inventory-counts.$countId.jsx` provides the placeholder count detail page and a friendly not-found state.
+`/app/inventory-counts/new` first loads active locations and product types from the authenticated shop through the GraphQL Admin API. The employee selects a location and product-type scope and enters a trimmed, count-specific area and employee name. Preview reads Shopify without writing to PostgreSQL. Create revalidates the choices, fetches a fresh snapshot, creates the count as `COUNTING`, records `startedAt`, and redirects to `/app/inventory-counts/:countId/count`; browser-provided totals are never trusted.
 
-## Status rules
+Locations come from the paginated `locations` connection and inactive locations are excluded. Product types are derived from cursor-paginated active product variants. `__ALL__` represents all product types and `__UNCATEGORIZED__` represents a blank product type.
 
-Current counts have a status of `DRAFT`, `COUNTING`, or `REVIEW`. History contains `COMPLETED` and `CANCELLED` counts.
+The scope includes only ACTIVE products, tracked inventory items, and variants with an inventory level at the selected location. Zero-on-hand variants and variants without a SKU or barcode remain in scope. DRAFT/ARCHIVED products, untracked items, and variants not stocked at the location are excluded.
 
-## Progress calculations
+Expected quantity comes only from the location inventory level's named `on_hand` quantity. A missing `on_hand` value fails the entire operation. Every line stores a frozen integer `startingQuantity`; later Shopify changes do not update it.
 
-A product is counted when its line has a positive `countedQuantity`, a non-null `firstScannedAt`, or a status of `COUNTED`, `RECOUNT`, `APPROVED`, or `EXCLUDED`. Products counted is the number of matching lines; total products is every line in the count.
+Count numbers are integers scoped by shop and displayed with three-digit padding. A serializable transaction calculates the next value and creates the count plus all lines atomically. The `[shop, countNumber]` unique constraint and retry handling make concurrent allocation safe and prevent reuse of historical numbers.
 
-Quantity counted is the sum of `countedQuantity`. Total quantity is the sum of `startingQuantity`, with null values treated as zero. A zero-inventory variant still contributes one to total products but contributes zero to total quantity.
+Before preview and creation, active DRAFT, COUNTING, and REVIEW counts are compared by shop, location, normalized (trimmed, case-insensitive) area, and intersecting product-type scope. `__ALL__` overlaps every scope. A warning names matches and creation requires explicit confirmation.
+
+## Status workflow
+
+All transitions are authenticated, scoped by count ID and shop, and guarded by the current database status. `COUNTING` can be saved to `DRAFT`, finished to `REVIEW`, or cancelled. `DRAFT` can continue to `COUNTING`. `REVIEW` can return to `COUNTING`, complete without Shopify changes, or be cancelled. `COMPLETED` and `CANCELLED` are terminal and read-only.
+
+A line is unresolved only when it remains `UNCOUNTED`, has `countedQuantity` zero, has no `firstScannedAt`, and is not `committedUncounted`. Finishing with unresolved lines requires confirmation. Confirmed lines retain `UNCOUNTED`, zero quantity, and null scan timestamps while `committedUncounted = true` records the audit distinction. They count as resolved in progress without being represented as physical scans.
+
+Cancellation requires a non-empty reason. The service preserves existing notes and appends `Cancellation reason:` plus the supplied text, then records `completedAt` and moves the count to `CANCELLED`.
 
 ## Current limitations
 
-- Search is inactive.
-- New Count is inactive.
-- Detail pages are read-only previews with count totals, product-line variances, and read-only notes at the bottom.
-- Continue Counting will eventually open a separate editable counting workflow. It remains inactive until that route exists.
-- Completed and cancelled counts remain permanently read-only.
-- CSV export is not yet implemented, so Export CSV remains inactive.
+- Barcode counting is not implemented.
+- Shopify inventory is never written.
 - CSV export is not implemented.
-- Shopify inventory sync is not implemented.
+- Counting quantities and barcode scanning are not implemented; counting mode is currently read-only.

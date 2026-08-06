@@ -46,7 +46,12 @@ export function CountLinesTable({ lines }) {
                 )}
               </td>
               <td>
-                <s-badge>{line.status}</s-badge>
+                <s-stack direction="block" gap="small">
+                  <s-badge>{line.status}</s-badge>
+                  {line.committedUncounted && (
+                    <s-badge tone="attention">Committed as uncounted</s-badge>
+                  )}
+                </s-stack>
               </td>
             </tr>
           ))}

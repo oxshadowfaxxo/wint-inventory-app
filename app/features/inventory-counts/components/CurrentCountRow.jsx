@@ -2,6 +2,7 @@
 
 import { Link } from "react-router";
 import styles from "./current-counts.module.css";
+import { formatInventoryCountNumber } from "../utils/inventory-count-number";
 
 const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
@@ -13,6 +14,9 @@ function formatDateTime(value, fallback) {
 }
 
 function formatCountNumber(count) {
+  if (Number.isInteger(count.countNumber)) {
+    return formatInventoryCountNumber(count.countNumber);
+  }
   const numericName = count.name.match(/\d+/)?.[0];
 
   if (numericName) {

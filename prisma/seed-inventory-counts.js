@@ -261,6 +261,9 @@ async function createTestCount(transaction, countDefinition) {
   const inventoryCount = await transaction.inventoryCount.create({
     data: {
       shop: TEST_SHOP,
+      countNumber: Number(countNumber),
+      area: "Development seed area",
+      productTypes: ["__ALL__"],
       ...countData,
     },
   });

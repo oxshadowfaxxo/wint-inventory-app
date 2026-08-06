@@ -1,10 +1,15 @@
 /* eslint-disable react/prop-types */
 
+import { formatInventoryCountNumber } from "../utils/inventory-count-number";
+
 const dateFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
 });
 
 function formatCountName(count) {
+  if (Number.isInteger(count.countNumber)) {
+    return `Count: ${formatInventoryCountNumber(count.countNumber)}`;
+  }
   const numericName = count.name.match(/\d+/)?.[0];
 
   if (numericName) {

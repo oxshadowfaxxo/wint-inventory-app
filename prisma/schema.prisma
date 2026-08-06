@@ -52,9 +52,12 @@ enum InventoryLineStatus {
 model InventoryCount {
   id           String               @id @default(cuid())
   shop         String
+  countNumber  Int
   name         String
   locationId   String
   locationName String
+  area         String
+  productTypes Json
   status       InventoryCountStatus @default(DRAFT)
   createdBy    String?
   startedAt    DateTime?
@@ -67,6 +70,7 @@ model InventoryCount {
 
   @@index([shop, locationId])
   @@index([shop, status])
+  @@unique([shop, countNumber])
 }
 
 model InventoryCountLine {
@@ -83,6 +87,7 @@ model InventoryCountLine {
   barcode            String?
   startingQuantity   Int?
   countedQuantity    Int                 @default(0)
+  committedUncounted Boolean             @default(false)
   approvedQuantity   Int?
   status             InventoryLineStatus @default(UNCOUNTED)
   note               String?

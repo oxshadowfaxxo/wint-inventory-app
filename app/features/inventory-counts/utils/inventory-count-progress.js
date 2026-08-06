@@ -17,11 +17,7 @@ export function calculateCountProgress(lines) {
       progress.totalQuantity += line.startingQuantity ?? 0;
       progress.quantityCounted += line.countedQuantity;
 
-      if (
-        line.countedQuantity > 0 ||
-        line.firstScannedAt !== null ||
-        COUNTED_LINE_STATUSES.has(line.status)
-      ) {
+      if (isInventoryCountLineResolved(line)) {
         progress.productsCounted += 1;
       }
 
@@ -33,6 +29,15 @@ export function calculateCountProgress(lines) {
       quantityCounted: 0,
       totalQuantity: 0,
     },
+  );
+}
+
+export function isInventoryCountLineResolved(line) {
+  return (
+    line.committedUncounted === true ||
+    line.countedQuantity > 0 ||
+    line.firstScannedAt !== null ||
+    COUNTED_LINE_STATUSES.has(line.status)
   );
 }
 
