@@ -1,34 +1,23 @@
-import {
-  Form,
-  redirect,
-  useActionData,
-  useLoaderData,
-} from "react-router";
+import { Form, redirect, useActionData, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { CountingProductsTable } from "../features/inventory-counts/components/CountingProductsTable";
 import { AddProductSearch } from "../features/inventory-counts/components/AddProductSearch";
 import { getInventoryCount } from "../features/inventory-counts/services/inventory-counts.server";
 import {
-  cancelInventoryCount,
   finishInventoryCount,
   friendlyWorkflowError,
   transitionInventoryCount,
   updateInventoryLineQuantity,
   addProductToInventoryCount,
   removeInventoryCountLines,
+  scanInventoryCountBarcode,
 } from "../features/inventory-counts/services/inventory-count-workflow.server";
 import {
   getShopifyVariantForAddition,
   searchShopifyVariants,
 } from "../features/inventory-counts/services/shopify-inventory.server";
-import { calculateCountProgress } from "../features/inventory-counts/utils/inventory-count-progress";
 import { formatInventoryCountNumber } from "../features/inventory-counts/utils/inventory-count-number";
-
-const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
-  dateStyle: "medium",
-  timeStyle: "short",
-});
 
 export const loader = async ({ request, params }) => {
   const { session } = await authenticate.admin(request);
@@ -43,7 +32,6 @@ export const loader = async ({ request, params }) => {
     count: {
       ...count,
       displayNumber: formatInventoryCountNumber(count.countNumber),
-      progress: calculateCountProgress(count.lines),
     },
   };
 };
@@ -58,7 +46,9 @@ export const action = async ({ request, params }) => {
     if (formData.get("countId") && formData.get("countId") !== countId) {
       return { error: "Inventory count not found." };
     }
-    if (["increment-line", "decrement-line", "set-line-quantity"].includes(intent)) {
+    if (
+      ["increment-line", "decrement-line", "set-line-quantity"].includes(intent)
+    ) {
       const line = await updateInventoryLineQuantity({
         shop: session.shop,
         countId,
@@ -67,6 +57,22 @@ export const action = async ({ request, params }) => {
         submittedQuantity: formData.get("quantity"),
       });
       return { line };
+    }
+    if (intent === "scan-barcode") {
+      const barcode = String(formData.get("barcode") || "").trim();
+      try {
+        const scan = await scanInventoryCountBarcode({
+          shop: session.shop,
+          countId,
+          barcode,
+        });
+        return { scan };
+      } catch (error) {
+        if (error.code === "BARCODE_NOT_FOUND") {
+          return { error: error.message, barcode, scanError: true };
+        }
+        throw error;
+      }
     }
     if (intent === "remove-count-lines") {
       const removedCount = await removeInventoryCountLines({
@@ -85,8 +91,13 @@ export const action = async ({ request, params }) => {
         return { error: "This count is not in counting mode.", searched: true };
       }
       const search = String(formData.get("search") || "").trim();
-      if (!search) return { error: "Enter a Shopify product search.", searched: true };
-      const results = await searchShopifyVariants(admin, count.locationId, search);
+      if (!search)
+        return { error: "Enter a Shopify product search.", searched: true };
+      const results = await searchShopifyVariants(
+        admin,
+        count.locationId,
+        search,
+      );
       return { results, searched: true };
     }
     if (intent === "add-product") {
@@ -99,11 +110,19 @@ export const action = async ({ request, params }) => {
         count.locationId,
         String(formData.get("variantId") || ""),
       );
-      await addProductToInventoryCount({ shop: session.shop, countId, variant });
+      await addProductToInventoryCount({
+        shop: session.shop,
+        countId,
+        variant,
+      });
       return { added: true };
     }
     if (intent === "save") {
-      await transitionInventoryCount({ shop: session.shop, countId, transition: "save" });
+      await transitionInventoryCount({
+        shop: session.shop,
+        countId,
+        transition: "save",
+      });
       return redirect(`/app/inventory-counts/${countId}`);
     }
     if (intent === "finish" || intent === "commit-and-finish") {
@@ -113,14 +132,6 @@ export const action = async ({ request, params }) => {
         commitUncounted: intent === "commit-and-finish",
       });
       if (warning) return { finishWarning: warning };
-      return redirect(`/app/inventory-counts/${countId}`);
-    }
-    if (intent === "cancel") {
-      await cancelInventoryCount({
-        shop: session.shop,
-        countId,
-        reason: String(formData.get("reason") || ""),
-      });
       return redirect(`/app/inventory-counts/${countId}`);
     }
     return { error: "Choose a valid inventory count action." };
@@ -142,44 +153,52 @@ export default function InventoryCountCountingPage() {
   const actionData = useActionData();
   return (
     <s-page heading={`Count: ${count.displayNumber}`}>
-      <s-banner tone="info"><strong>Counting mode</strong></s-banner>
-      {actionData?.error && <s-banner tone="critical">{actionData.error}</s-banner>}
-
-      <s-section heading="Count summary">
-        <s-stack direction="block" gap="base">
-          <s-text>Status: <s-badge>{count.status}</s-badge></s-text>
-          <s-text>Location: {count.locationName}</s-text>
-          <s-text>Area: {count.area}</s-text>
-          <s-text>Employee: {count.createdBy || "Not assigned"}</s-text>
-          <s-text>Started: {count.startedAt ? dateTimeFormatter.format(new Date(count.startedAt)) : "Not started"}</s-text>
-          <s-text>Products: {count.progress.productsCounted} of {count.progress.totalProducts}</s-text>
-          <s-text>Quantity: {count.progress.quantityCounted} of {count.progress.totalQuantity}</s-text>
-        </s-stack>
-      </s-section>
-
-      <s-section heading="Counting actions">
-        <s-stack direction="inline" gap="base">
-          <Form method="post">
-            <input type="hidden" name="intent" value="save" />
-            <s-button type="submit">Save &amp; Exit</s-button>
-          </Form>
-          <Form method="post">
-            <input type="hidden" name="intent" value="finish" />
-            <s-button variant="primary" type="submit">Finish Counting</s-button>
-          </Form>
-        </s-stack>
-      </s-section>
+      <s-badge slot="accessory" tone="info">
+        COUNTING
+      </s-badge>
+      <s-button
+        slot="secondary-actions"
+        onClick={() =>
+          document.getElementById("save-count-form")?.requestSubmit()
+        }
+      >
+        Save &amp; Exit
+      </s-button>
+      <s-button
+        slot="primary-action"
+        variant="primary"
+        onClick={() =>
+          document.getElementById("finish-count-form")?.requestSubmit()
+        }
+      >
+        Finish Counting
+      </s-button>
+      <Form method="post" id="save-count-form" hidden>
+        <input type="hidden" name="intent" value="save" />
+      </Form>
+      <Form method="post" id="finish-count-form" hidden>
+        <input type="hidden" name="intent" value="finish" />
+      </Form>
+      {actionData?.error && (
+        <s-banner tone="critical">{actionData.error}</s-banner>
+      )}
 
       {actionData?.finishWarning && (
         <s-section heading="Uncounted variants">
           <s-banner tone="warning">
-            {actionData.finishWarning.variants} variants have not been counted. These variants represent {actionData.finishWarning.expectedQuantity} expected units.
+            {actionData.finishWarning.variants} variants have not been counted.
+            These variants represent {actionData.finishWarning.expectedQuantity}{" "}
+            expected units.
           </s-banner>
           <Form method="post">
             <input type="hidden" name="intent" value="commit-and-finish" />
             <s-stack direction="inline" gap="base">
-              <s-button href={`/app/inventory-counts/${count.id}/count`}>Go Back and Continue Counting</s-button>
-              <s-button variant="primary" type="submit">Commit Uncounted Items and Finish</s-button>
+              <s-button href={`/app/inventory-counts/${count.id}/count`}>
+                Go Back and Continue Counting
+              </s-button>
+              <s-button variant="primary" type="submit">
+                Commit Uncounted Items and Finish
+              </s-button>
             </s-stack>
           </Form>
         </s-section>
@@ -198,16 +217,6 @@ export default function InventoryCountCountingPage() {
         <s-paragraph>{count.notes?.trim() || "No notes added."}</s-paragraph>
       </s-section>
 
-      <s-section heading="Cancel count">
-        <s-paragraph>Cancelling is permanent. Enter a reason to confirm.</s-paragraph>
-        <Form method="post">
-          <input type="hidden" name="intent" value="cancel" />
-          <div style={{ display: "grid", gap: 12, maxWidth: 640 }}>
-            <label><strong>Cancellation reason</strong><textarea name="reason" required rows={3} style={{ display: "block", width: "100%" }} /></label>
-            <s-button tone="critical" type="submit">Cancel Count</s-button>
-          </div>
-        </Form>
-      </s-section>
     </s-page>
   );
 }

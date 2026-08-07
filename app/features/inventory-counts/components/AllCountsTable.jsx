@@ -86,23 +86,27 @@ function ArchiveAction({ count }) {
   const fetcher = useFetcher();
   const [confirming, setConfirming] = useState(false);
   const archived = Boolean(count.archivedAt);
-  const eligible = ["COMPLETED", "CANCELLED"].includes(count.status);
+  const incomplete = ["DRAFT", "COUNTING", "REVIEW"].includes(count.status);
   useEffect(() => {
     if (fetcher.data?.success) setConfirming(false);
   }, [fetcher.data]);
-  if (!archived && !eligible) return <span>—</span>;
   if (!confirming) {
     return <button type="button" onClick={() => setConfirming(true)}>{archived ? "Unarchive" : "Archive"}</button>;
   }
   return (
     <div className={styles.confirmation}>
       <strong>{archived ? `Restore Count: ${formatInventoryCountNumber(count.countNumber)} to the active list?` : `Archive Count: ${formatInventoryCountNumber(count.countNumber)}?`}</strong>
-      {!archived && <span>Archived counts remain available for reporting.</span>}
+      {!archived && incomplete && (
+        <span>This count is not complete. Archiving will remove it from the active count list, but its data will be preserved.</span>
+      )}
+      {!archived && !incomplete && (
+        <span>Archived counts remain available when &quot;Show archived counts&quot; is enabled.</span>
+      )}
       <fetcher.Form method="post" action="/app/inventory-counts">
         <input type="hidden" name="intent" value={archived ? "unarchive" : "archive"} />
         <input type="hidden" name="countId" value={count.id} />
         <div className={styles.confirmationActions}>
-          <button type="button" onClick={() => setConfirming(false)}>Cancel</button>
+          <button type="button" onClick={() => setConfirming(false)}>Keep Count</button>
           <button type="submit" className={archived ? undefined : styles.dangerButton} disabled={fetcher.state !== "idle"}>{archived ? "Restore Count" : "Archive Count"}</button>
         </div>
       </fetcher.Form>

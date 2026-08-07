@@ -19,7 +19,6 @@ import {
 } from "../features/inventory-counts/utils/inventory-count-progress";
 import { formatInventoryCountNumber } from "../features/inventory-counts/utils/inventory-count-number";
 import {
-  cancelInventoryCount,
   friendlyWorkflowError,
   transitionInventoryCount,
 } from "../features/inventory-counts/services/inventory-count-workflow.server";
@@ -79,20 +78,14 @@ export const action = async ({ request, params }) => {
     }
     if (intent === "complete") {
       if (formData.get("confirmComplete") !== "yes") {
-        return { error: "Confirm completion without changing Shopify inventory." };
+        return {
+          error: "Confirm completion without changing Shopify inventory.",
+        };
       }
       await transitionInventoryCount({
         shop: session.shop,
         countId,
         transition: "complete",
-      });
-      return redirect(`/app/inventory-counts/${countId}`);
-    }
-    if (intent === "cancel") {
-      await cancelInventoryCount({
-        shop: session.shop,
-        countId,
-        reason: String(formData.get("reason") || ""),
       });
       return redirect(`/app/inventory-counts/${countId}`);
     }
@@ -111,8 +104,37 @@ export default function InventoryCountDetailPage() {
 
   return (
     <s-page heading={`Count: ${count.countNumber}`}>
-      <s-link href="/app/inventory-counts">Back to Inventory Counts</s-link>
-      {actionData?.error && <s-banner tone="critical">{actionData.error}</s-banner>}
+      <s-button slot="secondary-actions" href="/app/inventory-counts">
+        Back to Counts
+      </s-button>
+      {count.status === "DRAFT" && (
+        <>
+          <s-button
+            slot="primary-action"
+            variant="primary"
+            onClick={() =>
+              document.getElementById("continue-counting-form")?.requestSubmit()
+            }
+          >
+            Continue Counting
+          </s-button>
+          <Form method="post" id="continue-counting-form" hidden>
+            <input type="hidden" name="intent" value="continue" />
+          </Form>
+        </>
+      )}
+      {count.status === "COUNTING" && (
+        <s-button
+          slot="primary-action"
+          variant="primary"
+          href={`/app/inventory-counts/${count.id}/count`}
+        >
+          Continue Counting
+        </s-button>
+      )}
+      {actionData?.error && (
+        <s-banner tone="critical">{actionData.error}</s-banner>
+      )}
 
       <s-section heading="Count summary">
         <s-stack direction="block" gap="base">
@@ -126,11 +148,14 @@ export default function InventoryCountDetailPage() {
             <s-text>Employee: {count.createdBy || "Not assigned"}</s-text>
           </s-stack>
           <s-text>
-            Product types: {count.productTypes.includes("__ALL__")
+            Product types:{" "}
+            {count.productTypes.includes("__ALL__")
               ? "All product types"
-              : count.productTypes.map((type) =>
-                  type === "__UNCATEGORIZED__" ? "Uncategorized" : type,
-                ).join(", ")}
+              : count.productTypes
+                  .map((type) =>
+                    type === "__UNCATEGORIZED__" ? "Uncategorized" : type,
+                  )
+                  .join(", ")}
           </s-text>
           <s-stack direction="inline" gap="large">
             <s-text>Started: {formatDateTime(count.startedAt)}</s-text>
@@ -152,34 +177,32 @@ export default function InventoryCountDetailPage() {
         </s-stack>
       </s-section>
 
-      <s-section heading="Actions">
-        <s-stack direction="inline" gap="base">
-          {count.status === "DRAFT" && (
-            <Form method="post">
-              <input type="hidden" name="intent" value="continue" />
-              <s-button variant="primary" type="submit">Continue Counting</s-button>
-            </Form>
-          )}
-          {count.status === "COUNTING" && (
-            <s-button variant="primary" href={`/app/inventory-counts/${count.id}/count`}>Continue Counting</s-button>
-          )}
-          <s-button href="/app/inventory-counts">Return to Counts Page</s-button>
-          {count.status === "COMPLETED" && <s-button disabled>Export CSV</s-button>}
-        </s-stack>
-      </s-section>
-
       {count.status === "REVIEW" && (
         <s-section heading="Complete Count">
           <s-stack direction="block" gap="base">
             <Form method="post">
               <input type="hidden" name="intent" value="complete" />
-              <label><input type="checkbox" name="confirmComplete" value="yes" required /> Confirm completion without changing Shopify inventory</label>
+              <label>
+                <input
+                  type="checkbox"
+                  name="confirmComplete"
+                  value="yes"
+                  required
+                />{" "}
+                Confirm completion without changing Shopify inventory
+              </label>
               <div style={{ marginTop: 12 }}>
-                <s-button variant="primary" type="submit">Complete without changing Shopify inventory</s-button>
+                <s-button variant="primary" type="submit">
+                  Complete without changing Shopify inventory
+                </s-button>
               </div>
             </Form>
-            <s-button disabled>Complete and apply approved inventory adjustments</s-button>
-            <s-text>Shopify inventory adjustments are not available yet.</s-text>
+            <s-button disabled>
+              Complete and apply approved inventory adjustments
+            </s-button>
+            <s-text>
+              Shopify inventory adjustments are not available yet.
+            </s-text>
             <Form method="post">
               <input type="hidden" name="intent" value="return-to-counting" />
               <s-button type="submit">Return to counting</s-button>
@@ -209,18 +232,6 @@ export default function InventoryCountDetailPage() {
         </s-box>
       </s-section>
 
-      {["DRAFT", "COUNTING", "REVIEW"].includes(count.status) && (
-        <s-section heading="Cancel count">
-          <s-paragraph>Cancelling is permanent. Enter a reason to confirm.</s-paragraph>
-          <Form method="post">
-            <input type="hidden" name="intent" value="cancel" />
-            <div style={{ display: "grid", gap: 12, maxWidth: 640 }}>
-              <label><strong>Cancellation reason</strong><textarea name="reason" required rows={3} style={{ display: "block", width: "100%" }} /></label>
-              <s-button tone="critical" type="submit">Cancel Count</s-button>
-            </div>
-          </Form>
-        </s-section>
-      )}
     </s-page>
   );
 }
@@ -233,9 +244,7 @@ export function ErrorBoundary() {
       <s-page heading="Inventory count not found">
         <s-section>
           <s-paragraph>Inventory count not found.</s-paragraph>
-          <s-link href="/app/inventory-counts">
-            Back to Inventory Counts
-          </s-link>
+          <s-link href="/app/inventory-counts">Back to Inventory Counts</s-link>
         </s-section>
       </s-page>
     );

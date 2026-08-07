@@ -111,48 +111,6 @@ export async function finishInventoryCount({ shop, countId, commitUncounted }) {
   });
 }
 
-export async function cancelInventoryCount({ shop, countId, reason }) {
-  const trimmedReason = reason.trim();
-  if (!trimmedReason) {
-    throw new InventoryCountWorkflowError(
-      "Enter a cancellation reason.",
-      "CANCELLATION_REASON_REQUIRED",
-    );
-  }
-  return prisma.$transaction(async (tx) => {
-    const count = await tx.inventoryCount.findFirst({
-      where: {
-        id: countId,
-        shop,
-        status: { in: ["DRAFT", "COUNTING", "REVIEW"] },
-      },
-      select: { notes: true },
-    });
-    if (!count) {
-      throw new InventoryCountWorkflowError(
-        "This count can no longer be cancelled.",
-      );
-    }
-    const cancellationNote = `Cancellation reason:\n${trimmedReason}`;
-    const notes = count.notes?.trim()
-      ? `${count.notes.trim()}\n\n${cancellationNote}`
-      : cancellationNote;
-    const updated = await tx.inventoryCount.updateMany({
-      where: {
-        id: countId,
-        shop,
-        status: { in: ["DRAFT", "COUNTING", "REVIEW"] },
-      },
-      data: { status: "CANCELLED", completedAt: new Date(), notes },
-    });
-    if (updated.count !== 1) {
-      throw new InventoryCountWorkflowError(
-        "This count can no longer be cancelled.",
-      );
-    }
-  });
-}
-
 export function friendlyWorkflowError(error) {
   if (error instanceof InventoryCountWorkflowError) return error.message;
   console.error("Inventory count workflow failed", {
@@ -161,6 +119,54 @@ export function friendlyWorkflowError(error) {
     stack: error.stack,
   });
   return "The inventory count could not be updated. Please try again.";
+}
+
+export async function scanInventoryCountBarcode({ shop, countId, barcode }) {
+  const trimmedBarcode = String(barcode ?? "").trim();
+  if (!trimmedBarcode) {
+    throw new InventoryCountWorkflowError("Scan or enter a barcode.", "BARCODE_REQUIRED");
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const count = await tx.inventoryCount.findFirst({
+      where: { id: countId, shop },
+      select: { id: true, status: true },
+    });
+    if (!count || count.status !== "COUNTING") {
+      throw new InventoryCountWorkflowError(
+        count ? "This count is not currently in counting mode." : "Inventory count not found.",
+      );
+    }
+    const matches = await tx.inventoryCountLine.findMany({
+      where: { inventoryCountId: count.id, barcode: trimmedBarcode },
+      select: { id: true, productTitle: true, variantTitle: true, firstScannedAt: true },
+    });
+    if (matches.length === 0) {
+      throw new InventoryCountWorkflowError("Barcode not found in this count.", "BARCODE_NOT_FOUND");
+    }
+    if (matches.length > 1) {
+      return {
+        duplicate: true,
+        barcode: trimmedBarcode,
+        message: `Multiple products in this count use barcode ${trimmedBarcode}.`,
+        matchingProducts: matches.map(({ firstScannedAt: _firstScannedAt, ...line }) => line),
+      };
+    }
+    const match = matches[0];
+    const now = new Date();
+    const line = await tx.inventoryCountLine.update({
+      where: { id: match.id },
+      data: {
+        countedQuantity: { increment: 1 },
+        firstScannedAt: match.firstScannedAt ?? now,
+        lastScannedAt: now,
+        status: "COUNTED",
+        committedUncounted: false,
+      },
+      select: { id: true, productTitle: true, variantTitle: true, countedQuantity: true },
+    });
+    return { line, barcode: trimmedBarcode };
+  }, { isolationLevel: "Serializable" });
 }
 
 const MAX_COUNTED_QUANTITY = 2147483647;
@@ -345,7 +351,7 @@ export async function setInventoryCountArchived({ shop, countId, archived }) {
   return prisma.$transaction(async (tx) => {
     const count = await tx.inventoryCount.findFirst({
       where: { id: countId, shop },
-      select: { status: true, archivedAt: true },
+      select: { archivedAt: true },
     });
     if (!count) {
       throw new InventoryCountWorkflowError("Inventory count not found.");
@@ -353,11 +359,6 @@ export async function setInventoryCountArchived({ shop, countId, archived }) {
     if (archived) {
       if (count.archivedAt) {
         throw new InventoryCountWorkflowError("This count is already archived.");
-      }
-      if (!["COMPLETED", "CANCELLED"].includes(count.status)) {
-        throw new InventoryCountWorkflowError(
-          "Only completed or cancelled counts can be archived.",
-        );
       }
     } else if (!count.archivedAt) {
       throw new InventoryCountWorkflowError("This count is not archived.");
@@ -367,9 +368,7 @@ export async function setInventoryCountArchived({ shop, countId, archived }) {
       where: {
         id: countId,
         shop,
-        ...(archived
-          ? { archivedAt: null, status: { in: ["COMPLETED", "CANCELLED"] } }
-          : { archivedAt: { not: null } }),
+        ...(archived ? { archivedAt: null } : { archivedAt: { not: null } }),
       },
       data: { archivedAt: archived ? new Date() : null },
     });

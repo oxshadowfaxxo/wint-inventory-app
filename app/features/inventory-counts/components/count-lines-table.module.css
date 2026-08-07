@@ -147,3 +147,10 @@
 .selectedRow .productWithSelection {
   background: #f1f8f5;
 }
+
+.recentlyScanned td,
+.recentlyScanned td:first-child,
+.recentlyScanned .productWithSelection {
+  background: #dff7e5;
+  transition: background-color 900ms ease-out;
+}
