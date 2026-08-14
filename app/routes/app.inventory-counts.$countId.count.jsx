@@ -15,6 +15,7 @@ import {
 } from "../features/inventory-counts/services/inventory-count-workflow.server";
 import {
   getShopifyVariantForAddition,
+  getShopifyVariantByExactBarcode,
   searchShopifyVariants,
 } from "../features/inventory-counts/services/shopify-inventory.server";
 import { formatInventoryCountNumber } from "../features/inventory-counts/utils/inventory-count-number";
@@ -61,15 +62,26 @@ export const action = async ({ request, params }) => {
     if (intent === "scan-barcode") {
       const barcode = String(formData.get("barcode") || "").trim();
       try {
+        const count = await getInventoryCount(session.shop, countId);
+        if (!count || count.status !== "COUNTING") {
+          return { error: "This count is not in counting mode.", barcode, scanError: true };
+        }
         const scan = await scanInventoryCountBarcode({
           shop: session.shop,
           countId,
           barcode,
+          findShopifyVariant: (exactBarcode) =>
+            getShopifyVariantByExactBarcode(admin, count.locationId, exactBarcode),
         });
         return { scan };
       } catch (error) {
-        if (error.code === "BARCODE_NOT_FOUND") {
-          return { error: error.message, barcode, scanError: true };
+        if (error.code === "BARCODE_NOT_FOUND" || error.userMessage) {
+          return {
+            error: error.userMessage || error.message,
+            barcode,
+            scanError: true,
+            matchingProducts: error.details,
+          };
         }
         throw error;
       }
@@ -180,7 +192,20 @@ export default function InventoryCountCountingPage() {
         <input type="hidden" name="intent" value="finish" />
       </Form>
       {actionData?.error && (
-        <s-banner tone="critical">{actionData.error}</s-banner>
+        <s-banner tone="critical">
+          <s-stack direction="block" gap="small">
+            <span>{actionData.error}</span>
+            {actionData.matchingProducts?.length > 0 && (
+              <s-unordered-list>
+                {actionData.matchingProducts.map((item, index) => (
+                  <s-list-item key={`${item.productTitle}-${item.sku}-${index}`}>
+                    {item.productTitle}{item.variantTitle ? ` — ${item.variantTitle}` : ""} — SKU: {item.sku || "—"}
+                  </s-list-item>
+                ))}
+              </s-unordered-list>
+            )}
+          </s-stack>
+        </s-banner>
       )}
 
       {actionData?.finishWarning && (
@@ -205,7 +230,7 @@ export default function InventoryCountCountingPage() {
       )}
 
       <s-section heading="Products">
-        <CountingProductsTable countId={count.id} lines={count.lines} />
+        <CountingProductsTable countId={count.id} countType={count.countType} lines={count.lines} />
       </s-section>
 
       <AddProductSearch

@@ -14,6 +14,7 @@ export function ScanOrSearchInput({
   lines,
   scanningDisabled,
   onLocateLine,
+  allowUnknownBarcode = false,
 }) {
   const fetcher = useFetcher();
   const inputRef = useRef(null);
@@ -66,6 +67,7 @@ export function ScanOrSearchInput({
         tone: "critical",
         message: fetcher.data?.error || "The barcode could not be processed.",
         barcode: submittedBarcode,
+        matchingProducts: fetcher.data?.matchingProducts,
       });
     }
     setValue("");
@@ -105,7 +107,7 @@ export function ScanOrSearchInput({
     const query = value.trim();
     if (!query) return;
     const barcodeMatches = exactBarcodeMatches(lines, query);
-    if (barcodeMatches.length > 0) {
+    if (barcodeMatches.length > 0 || allowUnknownBarcode) {
       if (scanningDisabled) {
         setResult({
           tone: "critical",

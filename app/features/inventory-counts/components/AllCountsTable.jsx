@@ -173,7 +173,7 @@ export function AllCountsTable({ counts }) {
           {visibleCounts.map((count) => (
             <div className={styles.row} role="row" key={count.id}>
               <Link className={styles.rowLink} to={`/app/inventory-counts/${count.id}`} aria-label={`Open Count ${formatInventoryCountNumber(count.countNumber)}`}>
-                <span>{formatInventoryCountNumber(count.countNumber)}</span>
+                <span>{formatInventoryCountNumber(count.countNumber)}<br /><small>{count.countType === "BLANK_SCAN" ? "Blank Scan" : "Product Type"}</small></span>
                 <span><s-badge>{count.status}</s-badge>{count.archivedAt && <s-badge tone="attention">Archived</s-badge>}</span>
                 <span>{count.locationName}</span><span>{count.area}</span><span>{count.createdBy || "—"}</span>
                 <span>{formatDate(count.startedAt)}</span><span>{formatDate(count.completedAt)}</span>

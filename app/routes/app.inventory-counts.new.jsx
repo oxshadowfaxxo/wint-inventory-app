@@ -26,6 +26,7 @@ async function getOptions(admin) {
 function readValues(formData) {
   const selected = [...new Set(formData.getAll("productTypes").map(String))];
   return {
+    countType: formData.get("countType") === "BLANK_SCAN" ? "BLANK_SCAN" : "PRODUCT_TYPE",
     locationId: String(formData.get("locationId") || ""),
     area: String(formData.get("area") || "").trim(),
     employee: String(formData.get("employee") || "").trim(),
@@ -39,11 +40,13 @@ function validate(values, options) {
   if (!location) errors.locationId = "Select a Shopify location.";
   if (!values.area) errors.area = "Enter an area.";
   if (!values.employee) errors.employee = "Enter an employee name.";
-  if (!values.productTypes.length) errors.productTypes = "Select at least one product type.";
-  const validTypes = new Set([ALL_PRODUCT_TYPES, ...options.productTypes]);
-  if (options.hasUncategorized) validTypes.add(UNCATEGORIZED_PRODUCT_TYPE);
-  if (values.productTypes.some((type) => !validTypes.has(type))) {
-    errors.productTypes = "Select valid product types.";
+  if (values.countType === "PRODUCT_TYPE" && !values.productTypes.length) errors.productTypes = "Select at least one product type.";
+  if (values.countType === "PRODUCT_TYPE") {
+    const validTypes = new Set([ALL_PRODUCT_TYPES, ...options.productTypes]);
+    if (options.hasUncategorized) validTypes.add(UNCATEGORIZED_PRODUCT_TYPE);
+    if (values.productTypes.some((type) => !validTypes.has(type))) {
+      errors.productTypes = "Select valid product types.";
+    }
   }
   return { errors, location };
 }
@@ -52,6 +55,15 @@ async function preparePreview(admin, shop, values, options) {
   const { errors, location } = validate(values, options);
   if (Object.keys(errors).length) return { errors, values };
   const configuration = { ...values, locationName: location.name };
+  if (values.countType === "BLANK_SCAN") {
+    return {
+      preview: {
+        configuration: { ...configuration, productTypes: [] },
+        summary: { totalVariants: 0, totalExpectedQuantity: 0 },
+        overlaps: [],
+      },
+    };
+  }
   const lines = await getInventorySnapshot(admin, values.locationId, values.productTypes);
   if (!lines.length) {
     return { error: "No inventory variants matched this count scope.", values };
@@ -76,7 +88,9 @@ export const action = async ({ request }) => {
   const formData = await request.formData();
   const values = readValues(formData);
   try {
-    const options = await getOptions(admin);
+    const options = values.countType === "BLANK_SCAN"
+      ? { locations: await getActiveLocations(admin), productTypes: [], hasUncategorized: false }
+      : await getOptions(admin);
     const prepared = await preparePreview(admin, session.shop, values, options);
     if (!prepared.preview || formData.get("intent") !== "create") return prepared;
 
@@ -86,9 +100,11 @@ export const action = async ({ request }) => {
         error: "Confirm that you want to create an overlapping count.",
       };
     }
-    // Fetch again at creation time; preview totals are never trusted.
-    const lines = await getInventorySnapshot(admin, values.locationId, values.productTypes);
-    if (!lines.length) return { error: "No inventory variants matched this count scope.", values };
+    // Product Type snapshots are fetched again at creation time; Blank Scan starts empty.
+    const lines = values.countType === "BLANK_SCAN"
+      ? []
+      : await getInventorySnapshot(admin, values.locationId, values.productTypes);
+    if (values.countType === "PRODUCT_TYPE" && !lines.length) return { error: "No inventory variants matched this count scope.", values };
     const count = await createInventoryCount({
       shop: session.shop,
       configuration: prepared.preview.configuration,

@@ -39,6 +39,7 @@ export function CountHistoryRow({ count }) {
           <s-stack direction="inline" gap="base">
             <s-heading>{formatCountName(count)}</s-heading>
             <s-badge>{count.status}</s-badge>
+            <s-badge>{count.countType === "BLANK_SCAN" ? "Blank Scan" : "Product Type"}</s-badge>
           </s-stack>
           <s-stack direction="inline" gap="large">
             <s-text>Location: {count.locationName}</s-text>
@@ -52,7 +53,7 @@ export function CountHistoryRow({ count }) {
           </s-stack>
           <s-stack direction="inline" gap="large">
             <s-text>
-              Products: {count.progress.productsCounted} of {count.progress.totalProducts}
+              {count.countType === "BLANK_SCAN" ? `Unique variants: ${count.progress.totalProducts}` : `Products: ${count.progress.productsCounted} of ${count.progress.totalProducts}`}
             </s-text>
             <s-text>Expected quantity: {count.progress.totalQuantity}</s-text>
             <s-text>

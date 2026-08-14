@@ -121,52 +121,108 @@ export function friendlyWorkflowError(error) {
   return "The inventory count could not be updated. Please try again.";
 }
 
-export async function scanInventoryCountBarcode({ shop, countId, barcode }) {
-  const trimmedBarcode = String(barcode ?? "").trim();
-  if (!trimmedBarcode) {
-    throw new InventoryCountWorkflowError("Scan or enter a barcode.", "BARCODE_REQUIRED");
-  }
-
+async function incrementScannedLine({ shop, countId, lineId }) {
   return prisma.$transaction(async (tx) => {
-    const count = await tx.inventoryCount.findFirst({
-      where: { id: countId, shop },
-      select: { id: true, status: true },
-    });
-    if (!count || count.status !== "COUNTING") {
-      throw new InventoryCountWorkflowError(
-        count ? "This count is not currently in counting mode." : "Inventory count not found.",
-      );
-    }
-    const matches = await tx.inventoryCountLine.findMany({
-      where: { inventoryCountId: count.id, barcode: trimmedBarcode },
+    const line = await tx.inventoryCountLine.findFirst({
+      where: {
+        id: lineId,
+        inventoryCountId: countId,
+        inventoryCount: { shop, status: "COUNTING" },
+      },
       select: { id: true, productTitle: true, variantTitle: true, firstScannedAt: true },
     });
-    if (matches.length === 0) {
-      throw new InventoryCountWorkflowError("Barcode not found in this count.", "BARCODE_NOT_FOUND");
+    if (!line) {
+      throw new InventoryCountWorkflowError("This count is not currently in counting mode.");
     }
-    if (matches.length > 1) {
-      return {
-        duplicate: true,
-        barcode: trimmedBarcode,
-        message: `Multiple products in this count use barcode ${trimmedBarcode}.`,
-        matchingProducts: matches.map(({ firstScannedAt: _firstScannedAt, ...line }) => line),
-      };
-    }
-    const match = matches[0];
     const now = new Date();
-    const line = await tx.inventoryCountLine.update({
-      where: { id: match.id },
+    return tx.inventoryCountLine.update({
+      where: { id: line.id },
       data: {
         countedQuantity: { increment: 1 },
-        firstScannedAt: match.firstScannedAt ?? now,
+        firstScannedAt: line.firstScannedAt ?? now,
         lastScannedAt: now,
         status: "COUNTED",
         committedUncounted: false,
       },
       select: { id: true, productTitle: true, variantTitle: true, countedQuantity: true },
     });
+  });
+}
+
+export async function scanInventoryCountBarcode({ shop, countId, barcode, findShopifyVariant }) {
+  const trimmedBarcode = String(barcode ?? "").trim();
+  if (!trimmedBarcode) {
+    throw new InventoryCountWorkflowError("Scan or enter a barcode.", "BARCODE_REQUIRED");
+  }
+
+  const count = await prisma.inventoryCount.findFirst({
+      where: { id: countId, shop },
+      select: { id: true, status: true, countType: true },
+    });
+  if (!count || count.status !== "COUNTING") {
+      throw new InventoryCountWorkflowError(
+        count ? "This count is not currently in counting mode." : "Inventory count not found.",
+      );
+  }
+  const matches = await prisma.inventoryCountLine.findMany({
+      where: { inventoryCountId: count.id, barcode: trimmedBarcode },
+      select: { id: true, productTitle: true, variantTitle: true, firstScannedAt: true },
+    });
+  if (matches.length > 1) {
+    return {
+      duplicate: true,
+      barcode: trimmedBarcode,
+      message: `Multiple products in this count use barcode ${trimmedBarcode}.`,
+      matchingProducts: matches.map(({ firstScannedAt: _firstScannedAt, ...line }) => line),
+    };
+  }
+  if (matches.length === 1) {
+    const line = await incrementScannedLine({ shop, countId, lineId: matches[0].id });
     return { line, barcode: trimmedBarcode };
-  }, { isolationLevel: "Serializable" });
+  }
+  if (count.countType !== "BLANK_SCAN") {
+      throw new InventoryCountWorkflowError("Barcode not found in this count.", "BARCODE_NOT_FOUND");
+  }
+  const variant = await findShopifyVariant(trimmedBarcode);
+  try {
+    const now = new Date();
+    const line = await prisma.$transaction(async (tx) => {
+      const currentCount = await tx.inventoryCount.findFirst({
+        where: { id: countId, shop, status: "COUNTING", countType: "BLANK_SCAN" },
+        select: { id: true },
+      });
+      if (!currentCount) {
+        throw new InventoryCountWorkflowError("This count is not currently in counting mode.");
+      }
+      return tx.inventoryCountLine.create({
+        data: {
+          inventoryCountId: countId,
+          ...variant,
+          countedQuantity: 1,
+          status: "COUNTED",
+          firstScannedAt: now,
+          lastScannedAt: now,
+          committedUncounted: false,
+        },
+        select: { id: true, productTitle: true, variantTitle: true, countedQuantity: true },
+      });
+    });
+    return { line, barcode: trimmedBarcode };
+  } catch (error) {
+    if (error.code !== "P2002") throw error;
+    const racedLine = await prisma.inventoryCountLine.findUnique({
+      where: {
+        inventoryCountId_inventoryItemId: {
+          inventoryCountId: countId,
+          inventoryItemId: variant.inventoryItemId,
+        },
+      },
+      select: { id: true },
+    });
+    if (!racedLine) throw error;
+    const line = await incrementScannedLine({ shop, countId, lineId: racedLine.id });
+    return { line, barcode: trimmedBarcode };
+  }
 }
 
 const MAX_COUNTED_QUANTITY = 2147483647;
@@ -313,6 +369,7 @@ export async function removeInventoryCountLines({ shop, countId, lineIds }) {
       where: { id: countId, shop },
       select: {
         status: true,
+        countType: true,
         _count: { select: { lines: true } },
         lines: {
           where: { id: { in: selectedIds } },
@@ -330,7 +387,10 @@ export async function removeInventoryCountLines({ shop, countId, lineIds }) {
         "One or more selected products were not found in this count.",
       );
     }
-    if (selectedIds.length >= count._count.lines) {
+    if (
+      count.countType === "PRODUCT_TYPE" &&
+      selectedIds.length >= count._count.lines
+    ) {
       throw new InventoryCountWorkflowError(
         "An inventory count must contain at least one product.",
       );

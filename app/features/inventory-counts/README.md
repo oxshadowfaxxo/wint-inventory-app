@@ -12,6 +12,8 @@ DRAFT, COUNTING, REVIEW, COMPLETED, and historical CANCELLED counts can all be a
 
 ## New Count workflow
 
+Every count stores an explicit `countType`: `PRODUCT_TYPE` (the default for existing records) or `BLANK_SCAN`. Product Type Count retains the frozen, preloaded workflow described below. Blank Scan Count requires only location, area, and employee; its preview reports zero starting products and quantity, and creation writes a `COUNTING` count with zero lines without reading the product catalog for a snapshot.
+
 `/app/inventory-counts/new` first loads active locations and product types from the authenticated shop through the GraphQL Admin API. The employee selects a location and product-type scope and enters a trimmed, count-specific area and employee name. Preview reads Shopify without writing to PostgreSQL. Create revalidates the choices, fetches a fresh snapshot, creates the count as `COUNTING`, records `startedAt`, and redirects to `/app/inventory-counts/:countId/count`; browser-provided totals are never trusted.
 
 Locations come from the paginated `locations` connection and inactive locations are excluded. Product types are derived from cursor-paginated active product variants. `__ALL__` represents all product types and `__UNCATEGORIZED__` represents a blank product type.
@@ -46,9 +48,15 @@ Add Product performs separate Shopify Admin GraphQL searches for exact barcode, 
 
 ## Scan or Search
 
+For `BLANK_SCAN`, the empty count remains usable and prompts the employee to scan the first product. An exact barcode not already in the count is looked up with the authenticated Shopify GraphQL Admin API. Exactly one ACTIVE, inventory-tracked variant must match. It must have an inventory level at the count location and an integer named `on_hand` quantity; stocked inventory with `on_hand = 0` is valid, while a missing level is reported as not stocked and is not treated as zero. No line is written for missing, ambiguous, inactive, untracked, not-stocked, or missing-on-hand results. Ambiguous results include product, variant, and SKU details.
+
+The first valid Blank Scan scan creates one line directly with `countedQuantity = 1`, `status = COUNTED`, both scan timestamps set, and a frozen `startingQuantity` equal to Shopify `on_hand` at that moment. Later Shopify changes never refresh this value. Repeat scans use an atomic increment without another Shopify lookup. The `[inventoryCountId, inventoryItemId]` unique constraint resolves concurrent first-scan races: a losing create retries as an increment, preventing duplicate rows and lost scans.
+
+Manual Add Product behaves consistently in either mode: it captures current Shopify `on_hand`, creates an `UNCOUNTED` line with quantity zero, and does not represent a physical scan. A later scan increments it to one. Blank Scan progress reports unique variants added, physical quantity counted, summed frozen Shopify starting quantity, and variance; it does not imply a predefined product universe.
+
 Counting mode uses one Scan or Search combobox for USB/Bluetooth scanners and manual product lookup. Exact barcode plus Enter has priority and invokes the authenticated scan action. Partial text displays an accessible listbox; Arrow Up and Arrow Down move the active option, Escape closes it, and Enter selects the active result when there is no exact barcode match.
 
-The authenticated `scan-barcode` action scopes the count by ID and session shop, requires `COUNTING`, trims the value, and uses exact barcode equality against frozen count lines. A single match is updated in a serializable transaction with Prisma's atomic `countedQuantity: { increment: 1 }`. The first scan timestamp is set once, the last scan timestamp is refreshed, status becomes `COUNTED`, and `committedUncounted` is cleared. Shopify is not called and the browser never submits a product ID or authoritative quantity.
+The authenticated `scan-barcode` action scopes the count by ID and session shop, requires `COUNTING`, trims the value, and first uses exact barcode equality against existing count lines. A single match is updated with Prisma's atomic `countedQuantity: { increment: 1 }`. The first scan timestamp is set once, the last scan timestamp is refreshed, status becomes `COUNTED`, and `committedUncounted` is cleared. Product Type counts preserve the existing not-found/Add Product flow and do not automatically expand their sheet.
 
 Selecting a manual result never changes quantity. It collapses the result panel and uses the stable line ID to scroll to and temporarily highlight the row at its current sorted position. The employee can then use the existing quantity control. Exact scans use the same row-location behavior after loader revalidation updates quantities, progress, variance, and status.
 
@@ -58,7 +66,7 @@ Scans are queued in order and sent one at a time, so rapid repeated scans are no
 
 While a count is `COUNTING`, Remove Products enables a temporary client-side selection mode. Row checkboxes select individual frozen lines, and Select All affects all displayed rows. Cancellation clears the selection without changing PostgreSQL.
 
-Removal requires confirmation and may include uncounted, counted, originally snapshotted, or manually added lines. The count must retain at least one line. The server verifies the authenticated shop, `COUNTING` status, and ownership of every submitted line ID before deleting only those `InventoryCountLine` records. React Router then revalidates the count so variant, expected, counted, variance, and visible-row totals recalculate from the remaining lines.
+Removal requires confirmation and may include uncounted, counted, originally snapshotted, or manually added lines. Product Type counts must retain at least one line; Blank Scan counts may return to an empty sheet. The server verifies the authenticated shop, `COUNTING` status, and ownership of every submitted line ID before deleting only those `InventoryCountLine` records. React Router then revalidates the count so variant, expected, counted, variance, and visible-row totals recalculate from the remaining lines.
 
 Removing a line never changes Shopify inventory, the Shopify product, the count number, or the stored original `productTypes` scope. Related `InventoryScanEvent` records are preserved because the line relation uses `onDelete: SetNull`; their `inventoryCountLineId` becomes null. Removed-line details are not yet copied into a dedicated removal audit table.
 
@@ -71,7 +79,7 @@ The unified lookup does not filter or reorder the table, so active sorting remai
 ## Current limitations
 
 - Camera, offline, sound, vibration, and batch barcode scanning are not implemented.
-- Unknown products are not automatically added; Add Product remains a deliberate Shopify search.
+- Product Type counts require deliberate Add Product for unknown barcodes; Blank Scan counts add validated exact Shopify barcode matches automatically.
 - Separate editor audit records are not implemented.
 - Shopify inventory is never written.
 - CSV export is not implemented.

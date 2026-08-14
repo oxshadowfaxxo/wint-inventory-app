@@ -28,7 +28,7 @@ function SelectAllCheckbox({ checked, indeterminate, onChange }) {
   );
 }
 
-export function CountingProductsTable({ countId, lines }) {
+export function CountingProductsTable({ countId, countType, lines }) {
   const fetcher = useFetcher();
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
@@ -45,7 +45,7 @@ export function CountingProductsTable({ countId, lines }) {
   const allVisibleSelected =
     sortedLines.length > 0 && visibleSelectedCount === sortedLines.length;
   const someVisibleSelected = visibleSelectedCount > 0 && !allVisibleSelected;
-  const wouldRemoveEveryLine = selectedIds.size >= lines.length;
+  const wouldRemoveEveryLine = countType === "PRODUCT_TYPE" && selectedIds.size >= lines.length;
   const busy = fetcher.state !== "idle";
   const highlightTimer = useRef(null);
 
@@ -107,9 +107,10 @@ export function CountingProductsTable({ countId, lines }) {
         lines={lines}
         scanningDisabled={selectionMode}
         onLocateLine={handleLocateLine}
+        allowUnknownBarcode={countType === "BLANK_SCAN"}
       />
 
-      {!selectionMode ? (
+      {lines.length > 0 && (!selectionMode ? (
         <s-button onClick={() => setSelectionMode(true)}>
           Remove Products
         </s-button>
@@ -128,6 +129,10 @@ export function CountingProductsTable({ countId, lines }) {
             selected
           </s-text>
         </s-stack>
+      ))}
+
+      {lines.length === 0 && (
+        <s-banner tone="info">No products have been counted yet. Scan a barcode to add the first product.</s-banner>
       )}
 
       {fetcher.data?.message && (
@@ -187,7 +192,7 @@ export function CountingProductsTable({ countId, lines }) {
       {sort && <s-button onClick={resetSort}>Reset Sort</s-button>}
 
       <s-text>{lines.length} variants</s-text>
-      <div className={styles.container}>
+      {lines.length > 0 && <div className={styles.container}>
         <table className={styles.table}>
           <thead>
             <tr>
@@ -302,7 +307,7 @@ export function CountingProductsTable({ countId, lines }) {
             })}
           </tbody>
         </table>
-      </div>
+      </div>}
     </s-stack>
   );
 }

@@ -56,7 +56,7 @@ export function CurrentCountRow({ count }) {
       aria-label={`Open Count ${countNumber} at ${count.locationName}`}
     >
       <span className={styles.countNumber} data-label="Count">
-        {countNumber}
+        {countNumber}<br /><small>{count.countType === "BLANK_SCAN" ? "Blank Scan" : "Product Type"}</small>
       </span>
       <span className={styles.cell} data-label="Status">
         <s-badge>{count.status}</s-badge>
@@ -71,10 +71,10 @@ export function CurrentCountRow({ count }) {
         {count.createdBy || "Not assigned"}
       </span>
       <span className={styles.cell} data-label="Products">
-        {count.progress.productsCounted} of {count.progress.totalProducts}
+        {count.countType === "BLANK_SCAN" ? `${count.progress.totalProducts} variants` : `${count.progress.productsCounted} of ${count.progress.totalProducts}`}
       </span>
       <span className={styles.cell} data-label="Quantity">
-        {count.progress.quantityCounted} of {count.progress.totalQuantity}
+        {count.countType === "BLANK_SCAN" ? `${count.progress.quantityCounted} counted` : `${count.progress.quantityCounted} of ${count.progress.totalQuantity}`}
       </span>
       <span className={styles.cell} data-label="Last activity">
         {formatDateTime(count.lastActivity, "Unknown")}

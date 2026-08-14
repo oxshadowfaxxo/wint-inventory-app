@@ -238,6 +238,23 @@ const ADD_PRODUCT_VARIANT_QUERY = `#graphql
   }
 `;
 
+const EXACT_BARCODE_VARIANTS_QUERY = `#graphql
+  query ExactBarcodeVariants($query: String!, $locationId: ID!) {
+    productVariants(first: 20, query: $query) {
+      nodes {
+        id title sku barcode
+        product { id title productType vendor status }
+        inventoryItem {
+          id tracked
+          inventoryLevel(locationId: $locationId) {
+            quantities(names: ["on_hand"]) { name quantity }
+          }
+        }
+      }
+    }
+  }
+`;
+
 function quoteSearchValue(value) {
   return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
@@ -334,4 +351,74 @@ export async function getShopifyVariantForAddition(admin, locationId, variantId)
     throw error;
   }
   return normalized;
+}
+
+function barcodeLookupError(message, code, details) {
+  const error = new Error(message);
+  error.userMessage = message;
+  error.code = code;
+  if (details) error.details = details;
+  return error;
+}
+
+export async function getShopifyVariantByExactBarcode(admin, locationId, rawBarcode) {
+  const barcode = String(rawBarcode ?? "").trim();
+  const data = await graphql(admin, EXACT_BARCODE_VARIANTS_QUERY, {
+    query: `barcode:${quoteSearchValue(barcode)}`,
+    locationId,
+  });
+  const matches = data.productVariants.nodes.filter(
+    (variant) => variant.barcode?.trim() === barcode,
+  );
+  if (matches.length === 0) {
+    throw barcodeLookupError("Barcode not found in Shopify.", "SHOPIFY_BARCODE_NOT_FOUND");
+  }
+  if (matches.length > 1) {
+    throw barcodeLookupError(
+      "Multiple Shopify variants use this barcode.",
+      "DUPLICATE_SHOPIFY_BARCODE",
+      matches.map((variant) => ({
+        productTitle: variant.product.title,
+        variantTitle: variant.title || null,
+        sku: variant.sku?.trim() || null,
+      })),
+    );
+  }
+  const variant = matches[0];
+  if (variant.product.status !== "ACTIVE") {
+    throw barcodeLookupError("Product is not active in Shopify.", "INACTIVE_PRODUCT");
+  }
+  if (!variant.inventoryItem?.tracked) {
+    throw barcodeLookupError(
+      "Inventory tracking is not enabled for this product.",
+      "INVENTORY_NOT_TRACKED",
+    );
+  }
+  if (!variant.inventoryItem.inventoryLevel) {
+    throw barcodeLookupError(
+      "This product is not stocked at the selected location.",
+      "NOT_STOCKED_AT_LOCATION",
+    );
+  }
+  const onHand = variant.inventoryItem.inventoryLevel.quantities?.find(
+    (quantity) => quantity.name === "on_hand",
+  )?.quantity;
+  if (!Number.isInteger(onHand)) {
+    throw barcodeLookupError(
+      "Shopify on-hand quantity could not be loaded for this product.",
+      "MISSING_ON_HAND",
+    );
+  }
+  return {
+    inventoryItemId: variant.inventoryItem.id,
+    productId: variant.product.id,
+    variantId: variant.id,
+    productTitle: variant.product.title,
+    variantTitle: variant.title || null,
+    vendor: variant.product.vendor || null,
+    productType: variant.product.productType?.trim() || null,
+    sku: variant.sku?.trim() || null,
+    barcode,
+    startingQuantity: onHand,
+  };
 }

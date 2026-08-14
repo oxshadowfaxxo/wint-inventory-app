@@ -146,8 +146,9 @@ export default function InventoryCountDetailPage() {
             <s-text>Location: {count.locationName}</s-text>
             <s-text>Area: {count.area}</s-text>
             <s-text>Employee: {count.createdBy || "Not assigned"}</s-text>
+            <s-text>Count Type: {count.countType === "BLANK_SCAN" ? "Blank Scan" : "Product Type"}</s-text>
           </s-stack>
-          <s-text>
+          {count.countType === "PRODUCT_TYPE" && <s-text>
             Product types:{" "}
             {count.productTypes.includes("__ALL__")
               ? "All product types"
@@ -156,7 +157,7 @@ export default function InventoryCountDetailPage() {
                     type === "__UNCATEGORIZED__" ? "Uncategorized" : type,
                   )
                   .join(", ")}
-          </s-text>
+          </s-text>}
           <s-stack direction="inline" gap="large">
             <s-text>Started: {formatDateTime(count.startedAt)}</s-text>
             {count.completedAt && (
@@ -164,14 +165,9 @@ export default function InventoryCountDetailPage() {
             )}
           </s-stack>
           <s-stack direction="inline" gap="large">
-            <s-text>
-              Products: {count.progress.productsCounted} of{" "}
-              {count.progress.totalProducts}
-            </s-text>
-            <s-text>
-              Quantity: {count.progress.quantityCounted} of{" "}
-              {count.progress.totalQuantity}
-            </s-text>
+            <s-text>{count.countType === "BLANK_SCAN" ? `Unique variants added: ${count.progress.totalProducts}` : `Products: ${count.progress.productsCounted} of ${count.progress.totalProducts}`}</s-text>
+            <s-text>{count.countType === "BLANK_SCAN" ? `Total physically counted quantity: ${count.progress.quantityCounted}` : `Quantity: ${count.progress.quantityCounted} of ${count.progress.totalQuantity}`}</s-text>
+            {count.countType === "BLANK_SCAN" && <s-text>Total Shopify starting quantity: {count.progress.totalQuantity}</s-text>}
             <s-text>Variance: {formatVariance(count.variance)}</s-text>
           </s-stack>
         </s-stack>

@@ -49,6 +49,11 @@ enum InventoryLineStatus {
   EXCLUDED
 }
 
+enum InventoryCountType {
+  PRODUCT_TYPE
+  BLANK_SCAN
+}
+
 model InventoryCount {
   id           String               @id @default(cuid())
   shop         String
@@ -58,6 +63,7 @@ model InventoryCount {
   locationName String
   area         String
   productTypes Json
+  countType    InventoryCountType   @default(PRODUCT_TYPE)
   status       InventoryCountStatus @default(DRAFT)
   createdBy    String?
   startedAt    DateTime?
