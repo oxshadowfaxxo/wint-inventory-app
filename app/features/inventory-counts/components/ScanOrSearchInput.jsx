@@ -8,6 +8,10 @@ import {
 import styles from "./scan-or-search-input.module.css";
 
 const RESULT_LIMIT = 10;
+const SCAN_IDLE_MS = 80;
+const SCANNER_MAX_KEY_INTERVAL_MS = 45;
+const MIN_SCANNER_CHARACTERS = 3;
+const TERMINATOR_GUARD_MS = SCAN_IDLE_MS * 2;
 
 export function ScanOrSearchInput({
   countId,
@@ -20,6 +24,12 @@ export function ScanOrSearchInput({
   const inputRef = useRef(null);
   const currentBarcode = useRef(null);
   const requestWasBusy = useRef(false);
+  const scanIdleTimer = useRef(null);
+  const lastInputAt = useRef(null);
+  const scannerCandidate = useRef(false);
+  const valueRef = useRef("");
+  const suppressTerminatorUntil = useRef(0);
+  const refocusAfterScan = useRef(false);
   const [value, setValue] = useState("");
   const [queue, setQueue] = useState([]);
   const [open, setOpen] = useState(false);
@@ -38,6 +48,39 @@ export function ScanOrSearchInput({
   useEffect(() => {
     focusInput();
   }, [focusInput]);
+
+  useEffect(
+    () => () => window.clearTimeout(scanIdleTimer.current),
+    [],
+  );
+
+  const resetScannerTracking = useCallback(() => {
+    window.clearTimeout(scanIdleTimer.current);
+    scanIdleTimer.current = null;
+    lastInputAt.current = null;
+    scannerCandidate.current = false;
+  }, []);
+
+  const queueBarcode = useCallback((rawBarcode) => {
+    const barcode = String(rawBarcode ?? "").trim();
+    if (!barcode) return false;
+    if (scanningDisabled) {
+      setResult({
+        tone: "critical",
+        message: "Finish or cancel product selection before scanning.",
+      });
+      return false;
+    }
+    resetScannerTracking();
+    refocusAfterScan.current = document.activeElement === inputRef.current;
+    suppressTerminatorUntil.current = performance.now() + TERMINATOR_GUARD_MS;
+    valueRef.current = "";
+    setValue("");
+    setOpen(false);
+    setActiveIndex(-1);
+    setQueue((current) => [...current, barcode]);
+    return true;
+  }, [resetScannerTracking, scanningDisabled]);
 
   useEffect(() => {
     if (fetcher.state !== "idle") {
@@ -71,9 +114,14 @@ export function ScanOrSearchInput({
       });
     }
     setValue("");
+    valueRef.current = "";
     setOpen(false);
     setActiveIndex(-1);
-    focusInput();
+    const scannerStillOwnsFocus =
+      document.activeElement === inputRef.current ||
+      document.activeElement === document.body;
+    if (refocusAfterScan.current && scannerStillOwnsFocus) focusInput();
+    refocusAfterScan.current = false;
   }, [fetcher.data, fetcher.state, focusInput, onLocateLine]);
 
   useEffect(() => {
@@ -94,6 +142,8 @@ export function ScanOrSearchInput({
   }, [countId, fetcher, fetcher.state, queue, scanningDisabled]);
 
   function selectLine(line) {
+    resetScannerTracking();
+    valueRef.current = "";
     setValue("");
     setOpen(false);
     setActiveIndex(-1);
@@ -104,21 +154,11 @@ export function ScanOrSearchInput({
 
   function handleSubmit(event) {
     event.preventDefault();
-    const query = value.trim();
+    const query = valueRef.current.trim();
     if (!query) return;
     const barcodeMatches = exactBarcodeMatches(lines, query);
     if (barcodeMatches.length > 0 || allowUnknownBarcode) {
-      if (scanningDisabled) {
-        setResult({
-          tone: "critical",
-          message: "Finish or cancel product selection before scanning.",
-        });
-        return;
-      }
-      setValue("");
-      setOpen(false);
-      setActiveIndex(-1);
-      setQueue((current) => [...current, query]);
+      queueBarcode(query);
       return;
     }
     if (activeIndex >= 0 && visibleMatches[activeIndex]) {
@@ -129,7 +169,19 @@ export function ScanOrSearchInput({
   }
 
   function handleKeyDown(event) {
-    if (event.key === "ArrowDown" && visibleMatches.length > 0) {
+    const isTerminator = event.key === "Enter" || event.key === "Tab";
+    if (isTerminator && performance.now() < suppressTerminatorUntil.current) {
+      event.preventDefault();
+      return;
+    }
+    if (
+      event.key === "Tab" &&
+      valueRef.current.trim() &&
+      (scannerCandidate.current || exactBarcodeMatches(lines, valueRef.current).length > 0)
+    ) {
+      event.preventDefault();
+      queueBarcode(valueRef.current);
+    } else if (event.key === "ArrowDown" && visibleMatches.length > 0) {
       event.preventDefault();
       setOpen(true);
       setActiveIndex((current) =>
@@ -142,6 +194,62 @@ export function ScanOrSearchInput({
     } else if (event.key === "Escape") {
       setOpen(false);
       setActiveIndex(-1);
+    }
+  }
+
+  function handleChange(event) {
+    const nextValue = event.target.value;
+    const previousValue = valueRef.current;
+    const now = performance.now();
+    const appendedCharacter =
+      nextValue.length === previousValue.length + 1 &&
+      nextValue.startsWith(previousValue);
+
+    window.clearTimeout(scanIdleTimer.current);
+    scanIdleTimer.current = null;
+
+    if (!nextValue) {
+      resetScannerTracking();
+    } else if (!appendedCharacter) {
+      lastInputAt.current = now;
+      scannerCandidate.current = false;
+    } else if (!previousValue) {
+      lastInputAt.current = now;
+      scannerCandidate.current = true;
+    } else {
+      const interval = now - lastInputAt.current;
+      scannerCandidate.current =
+        scannerCandidate.current && interval <= SCANNER_MAX_KEY_INTERVAL_MS;
+      lastInputAt.current = now;
+    }
+
+    valueRef.current = nextValue;
+    setValue(nextValue);
+    setOpen(nextValue.trim().length > 0);
+    setActiveIndex(-1);
+
+    const query = nextValue.trim();
+    if (!query || scanningDisabled) return;
+
+    if (exactBarcodeMatches(lines, query).length > 0) {
+      queueBarcode(query);
+      return;
+    }
+
+    if (
+      allowUnknownBarcode &&
+      scannerCandidate.current &&
+      query.length >= MIN_SCANNER_CHARACTERS
+    ) {
+      scanIdleTimer.current = window.setTimeout(() => {
+        if (
+          document.activeElement === inputRef.current &&
+          scannerCandidate.current &&
+          valueRef.current.trim() === query
+        ) {
+          queueBarcode(query);
+        }
+      }, SCAN_IDLE_MS);
     }
   }
 
@@ -168,11 +276,7 @@ export function ScanOrSearchInput({
           value={value}
           placeholder="Scan barcode or search product, SKU, or barcode"
           autoComplete="off"
-          onChange={(event) => {
-            setValue(event.target.value);
-            setOpen(event.target.value.trim().length > 0);
-            setActiveIndex(-1);
-          }}
+          onChange={handleChange}
           onKeyDown={handleKeyDown}
         />
       </form>
