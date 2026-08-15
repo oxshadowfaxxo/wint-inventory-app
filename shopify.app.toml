@@ -1,9 +1,9 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "7b943084acfa47245f1be54c48c0819e"
-application_url = "https://example.com"
+application_url = "https://wint-inventory-app.vercel.app"
 embedded = true
-name = "wint-inventory-app"
+name = "wint inventory app"
 
 [access_scopes]
 # Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
@@ -48,5 +48,4 @@ api_version = "2026-10"
 redirect_urls = [ "https://example.com/api/auth" ]
 
 [build]
-include_config_on_deploy = true
 automatically_update_urls_on_dev = true
