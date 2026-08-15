@@ -1,4 +1,7 @@
 import { PrismaClient } from "@prisma/client";
+import { serverEnvironment } from "./env.server";
+
+void serverEnvironment.DATABASE_URL;
 
 if (process.env.NODE_ENV !== "production") {
   if (!global.prismaGlobal) {

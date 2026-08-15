@@ -77,6 +77,39 @@ For more information on the Shopify Dev MCP please read [the documentation](http
 
 ## Deployment
 
+### Vercel production
+
+Use Node.js 22.x in **Vercel → Project → Settings → Node.js Version**. The
+project requires Node.js 22.18 or newer within that release line.
+
+Configure these variables in the Vercel Production environment (do not commit
+their values):
+
+- `DATABASE_URL`: the pooled Neon PostgreSQL connection URL (normally using a
+  `-pooler` hostname)
+- `DIRECT_URL`: the corresponding unpooled Neon PostgreSQL connection URL used
+  by Prisma migrations
+- `SHOPIFY_API_KEY`
+- `SHOPIFY_API_SECRET`
+- `SCOPES`
+- `SHOPIFY_APP_URL=https://wint-inventory-app.vercel.app`
+
+The Shopify app's application URL and `SHOPIFY_APP_URL` must use the same
+origin. Run database migrations intentionally before deploying application
+code:
+
+```shell
+npm run db:status
+npm run db:migrate
+npm run build
+shopify app deploy
+vercel --prod
+```
+
+`shopify app deploy` is required after changing access scopes, callback URLs,
+or declarative app configuration. It does not deploy the web application to
+Vercel.
+
 ### Application Storage
 
 This template uses [Prisma](https://www.prisma.io/) to store session data, by default using an [SQLite](https://www.sqlite.org/index.html) database.
