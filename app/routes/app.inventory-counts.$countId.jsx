@@ -1,11 +1,9 @@
 import {
   Form,
-  Outlet,
-  redirect,
   isRouteErrorResponse,
   useActionData,
   useLoaderData,
-  useLocation,
+  useNavigate,
   useRouteError,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -62,7 +60,7 @@ export const loader = async ({ request, params }) => {
 };
 
 export const action = async ({ request, params }) => {
-  const { session } = await authenticate.admin(request);
+  const { session, redirect } = await authenticate.admin(request);
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "");
   const countId = params.countId;
@@ -98,13 +96,14 @@ export const action = async ({ request, params }) => {
 export default function InventoryCountDetailPage() {
   const { count } = useLoaderData();
   const actionData = useActionData();
-  const location = useLocation();
-
-  if (location.pathname.endsWith("/count")) return <Outlet />;
+  const navigate = useNavigate();
 
   return (
     <s-page heading={`Count: ${count.countNumber}`}>
-      <s-button slot="secondary-actions" href="/app/inventory-counts">
+      <s-button
+        slot="secondary-actions"
+        onClick={() => navigate("/app/inventory-counts")}
+      >
         Back to Counts
       </s-button>
       {count.status === "DRAFT" && (
@@ -127,7 +126,9 @@ export default function InventoryCountDetailPage() {
         <s-button
           slot="primary-action"
           variant="primary"
-          href={`/app/inventory-counts/${count.id}/count`}
+          onClick={() =>
+            navigate(`/app/inventory-counts/${count.id}/count`)
+          }
         >
           Continue Counting
         </s-button>
@@ -234,13 +235,16 @@ export default function InventoryCountDetailPage() {
 
 export function ErrorBoundary() {
   const error = useRouteError();
+  const navigate = useNavigate();
 
   if (isRouteErrorResponse(error) && error.status === 404) {
     return (
       <s-page heading="Inventory count not found">
         <s-section>
           <s-paragraph>Inventory count not found.</s-paragraph>
-          <s-link href="/app/inventory-counts">Back to Inventory Counts</s-link>
+          <s-button onClick={() => navigate("/app/inventory-counts")}>
+            Back to Inventory Counts
+          </s-button>
         </s-section>
       </s-page>
     );

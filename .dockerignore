@@ -1,3 +1,13 @@
 .cache
-build
+.env
+.env.*
+!.env.example
+.git
+.vercel
+.shopify
+.react-router
+.pnpm-store
+prisma/dev.sqlite
+prisma/dev.sqlite-journal
 node_modules
+build

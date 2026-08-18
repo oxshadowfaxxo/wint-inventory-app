@@ -147,7 +147,7 @@
 ### Future Scanner Features
 
 -   [ ] Camera barcode scanning
--   [ ] Optional scan success/error sounds
+-   [ ] Optional scan success/error sounds - do not need
 -   [ ] Quick-add unknown barcode from Shopify
 -   [ ] Scanner performance testing with production-size counts
 -   [ ] Physical scanner testing

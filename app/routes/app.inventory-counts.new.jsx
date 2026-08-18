@@ -1,4 +1,4 @@
-import { redirect, useActionData, useLoaderData } from "react-router";
+import { useActionData, useLoaderData, useNavigate } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { NewInventoryCountForm } from "../features/inventory-counts/components/NewInventoryCountForm";
@@ -84,7 +84,7 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { admin, session, redirect } = await authenticate.admin(request);
   const formData = await request.formData();
   const values = readValues(formData);
   try {
@@ -128,9 +128,13 @@ export const action = async ({ request }) => {
 };
 
 export default function NewInventoryCountPage() {
+  const navigate = useNavigate();
+
   return (
     <s-page heading="New Inventory Count">
-      <s-link href="/app/inventory-counts">Back to Inventory Counts</s-link>
+      <s-button onClick={() => navigate("/app/inventory-counts")}>
+        Back to Inventory Counts
+      </s-button>
       <NewInventoryCountForm loaderData={useLoaderData()} actionData={useActionData()} />
     </s-page>
   );

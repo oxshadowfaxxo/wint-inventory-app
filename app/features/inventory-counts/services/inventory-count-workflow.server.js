@@ -173,6 +173,8 @@ export async function scanInventoryCountBarcode({ shop, countId, barcode, findSh
       duplicate: true,
       barcode: trimmedBarcode,
       message: `Multiple products in this count use barcode ${trimmedBarcode}.`,
+      // firstScannedAt is intentionally omitted from duplicate-match responses.
+      // eslint-disable-next-line no-unused-vars
       matchingProducts: matches.map(({ firstScannedAt: _firstScannedAt, ...line }) => line),
     };
   }

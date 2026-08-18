@@ -1,12 +1,13 @@
 /* eslint-disable react/prop-types */
 import { useState } from "react";
-import { Form, useNavigation } from "react-router";
+import { Form, useNavigate, useNavigation } from "react-router";
 import { LocationSelect } from "./LocationSelect";
 import { ProductTypeSelect } from "./ProductTypeSelect";
 import { CountScopePreview } from "./CountScopePreview";
 
 export function NewInventoryCountForm({ loaderData, actionData }) {
   const navigation = useNavigation();
+  const navigate = useNavigate();
   const busy = navigation.state !== "idle";
   const preview = actionData?.preview;
   const values = actionData?.values || {};
@@ -42,7 +43,13 @@ export function NewInventoryCountForm({ loaderData, actionData }) {
         )}
         <s-section>
           <s-stack direction="inline" gap="base">
-            <s-button href="/app/inventory-counts/new">Back</s-button>
+            <s-button
+              onClick={() =>
+                navigate("/app/inventory-counts/new", { replace: true })
+              }
+            >
+              Back
+            </s-button>
             <s-button variant="primary" type="submit" {...(busy ? { loading: true } : {})}>Create &amp; Start Counting</s-button>
           </s-stack>
         </s-section>

@@ -3,6 +3,7 @@ const REQUIRED_ENVIRONMENT_VARIABLES = [
   "SHOPIFY_API_KEY",
   "SHOPIFY_API_SECRET",
   "SHOPIFY_APP_URL",
+  "SCOPES",
 ];
 
 function requireEnvironmentVariable(name) {

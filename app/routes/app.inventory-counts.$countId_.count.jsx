@@ -1,4 +1,9 @@
-import { Form, redirect, useActionData, useLoaderData } from "react-router";
+import {
+  Form,
+  useActionData,
+  useLoaderData,
+  useNavigate,
+} from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { CountingProductsTable } from "../features/inventory-counts/components/CountingProductsTable";
@@ -21,7 +26,7 @@ import {
 import { formatInventoryCountNumber } from "../features/inventory-counts/utils/inventory-count-number";
 
 export const loader = async ({ request, params }) => {
-  const { session } = await authenticate.admin(request);
+  const { session, redirect } = await authenticate.admin(request);
   const count = params.countId
     ? await getInventoryCount(session.shop, params.countId)
     : null;
@@ -38,7 +43,7 @@ export const loader = async ({ request, params }) => {
 };
 
 export const action = async ({ request, params }) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { admin, session, redirect } = await authenticate.admin(request);
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "");
   const countId = params.countId;
@@ -163,6 +168,7 @@ export const action = async ({ request, params }) => {
 export default function InventoryCountCountingPage() {
   const { count } = useLoaderData();
   const actionData = useActionData();
+  const navigate = useNavigate();
   return (
     <s-page heading={`Count: ${count.displayNumber}`}>
       <s-badge slot="accessory" tone="info">
@@ -218,7 +224,13 @@ export default function InventoryCountCountingPage() {
           <Form method="post">
             <input type="hidden" name="intent" value="commit-and-finish" />
             <s-stack direction="inline" gap="base">
-              <s-button href={`/app/inventory-counts/${count.id}/count`}>
+              <s-button
+                onClick={() =>
+                  navigate(`/app/inventory-counts/${count.id}/count`, {
+                    replace: true,
+                  })
+                }
+              >
                 Go Back and Continue Counting
               </s-button>
               <s-button variant="primary" type="submit">
