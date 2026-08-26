@@ -35,17 +35,23 @@ export const action = async ({ request }) => {
   const { session } = await authenticate.admin(request);
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "");
-  const countId = String(formData.get("countId") || "");
+  const countIds = [
+    ...new Set(formData.getAll("countId").map(String).filter(Boolean)),
+  ];
   try {
-    if (!countId) return { error: "Inventory count not found." };
+    if (countIds.length === 0) {
+      return { error: "Select at least one inventory count." };
+    }
     if (intent !== "archive" && intent !== "unarchive") {
       return { error: "Choose a valid archive action." };
     }
-    await setInventoryCountArchived({
-      shop: session.shop,
-      countId,
-      archived: intent === "archive",
-    });
+    for (const countId of countIds) {
+      await setInventoryCountArchived({
+        shop: session.shop,
+        countId,
+        archived: intent === "archive",
+      });
+    }
     return { success: true };
   } catch (error) {
     return { error: friendlyWorkflowError(error) };
