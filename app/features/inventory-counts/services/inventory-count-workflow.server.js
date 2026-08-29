@@ -111,6 +111,44 @@ export async function finishInventoryCount({ shop, countId, commitUncounted }) {
   });
 }
 
+export async function refreshReviewInventory({ shop, countId, quantities }) {
+  const refreshedAt = new Date();
+  return prisma.$transaction(async (tx) => {
+    const count = await tx.inventoryCount.findFirst({
+      where: { id: countId, shop },
+      select: {
+        status: true,
+        lines: { select: { id: true, inventoryItemId: true } },
+      },
+    });
+    if (!count) {
+      throw new InventoryCountWorkflowError("Inventory count not found.", "NOT_FOUND");
+    }
+    if (count.status !== "REVIEW") {
+      throw new InventoryCountWorkflowError(
+        "This count is no longer in review.",
+        "NOT_IN_REVIEW",
+      );
+    }
+
+    for (const line of count.lines) {
+      const quantity = quantities[line.inventoryItemId];
+      await tx.inventoryCountLine.update({
+        where: { id: line.id },
+        data: {
+          reviewShopifyQuantity: Number.isInteger(quantity) ? quantity : null,
+          reviewShopifyRefreshedAt: refreshedAt,
+        },
+      });
+    }
+    await tx.inventoryCount.update({
+      where: { id: countId },
+      data: { reviewInventoryRefreshedAt: refreshedAt },
+    });
+    return { refreshedAt };
+  });
+}
+
 export function friendlyWorkflowError(error) {
   if (error instanceof InventoryCountWorkflowError) return error.message;
   console.error("Inventory count workflow failed", {

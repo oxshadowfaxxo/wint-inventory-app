@@ -10,6 +10,15 @@ const numericFields = {
   expected: (line) => line.startingQuantity ?? 0,
   counted: (line) => line.countedQuantity,
   variance: (line) => line.countedQuantity - (line.startingQuantity ?? 0),
+  currentShopify: (line) => line.reviewShopifyQuantity,
+  shopifyChange: (line) =>
+    line.reviewShopifyQuantity == null || line.startingQuantity == null
+      ? null
+      : line.reviewShopifyQuantity - line.startingQuantity,
+  reviewVariance: (line) =>
+    line.reviewShopifyQuantity == null
+      ? null
+      : line.countedQuantity - line.reviewShopifyQuantity,
 };
 
 function compareText(left, right) {
@@ -35,9 +44,17 @@ export function sortInventoryCountLines(lines, sort) {
     .sort((left, right) => {
       const comparison = textValue
         ? compareText(textValue(left.line), textValue(right.line))
-        : numericValue(left.line) - numericValue(right.line);
+        : compareNumeric(numericValue(left.line), numericValue(right.line));
       const directed = sort.direction === "asc" ? comparison : -comparison;
       return directed || left.index - right.index;
     })
     .map(({ line }) => line);
+}
+
+function compareNumeric(left, right) {
+  if (left == null || right == null) {
+    if (left == null && right == null) return 0;
+    return left == null ? 1 : -1;
+  }
+  return left - right;
 }

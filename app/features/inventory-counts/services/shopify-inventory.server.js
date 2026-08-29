@@ -10,6 +10,51 @@ async function graphql(admin, query, variables) {
   return body.data;
 }
 
+const CURRENT_INVENTORY_QUANTITIES_QUERY = `#graphql
+  query CurrentInventoryQuantities($ids: [ID!]!, $locationId: ID!) {
+    nodes(ids: $ids) {
+      ... on InventoryItem {
+        id
+        tracked
+        inventoryLevel(locationId: $locationId) {
+          quantities(names: ["on_hand"]) {
+            name
+            quantity
+          }
+        }
+      }
+    }
+  }
+`;
+
+const INVENTORY_ITEM_BATCH_SIZE = 250;
+
+export async function getCurrentInventoryQuantities(
+  admin,
+  locationId,
+  inventoryItemIds,
+) {
+  const uniqueIds = [...new Set(inventoryItemIds.filter(Boolean))];
+  const quantities = Object.fromEntries(uniqueIds.map((id) => [id, null]));
+
+  for (let index = 0; index < uniqueIds.length; index += INVENTORY_ITEM_BATCH_SIZE) {
+    const ids = uniqueIds.slice(index, index + INVENTORY_ITEM_BATCH_SIZE);
+    const data = await graphql(admin, CURRENT_INVENTORY_QUANTITIES_QUERY, {
+      ids,
+      locationId,
+    });
+    for (const item of data.nodes) {
+      if (!item?.id || !item.tracked || !item.inventoryLevel) continue;
+      const onHand = item.inventoryLevel.quantities?.find(
+        (quantity) => quantity.name === "on_hand",
+      )?.quantity;
+      if (Number.isInteger(onHand)) quantities[item.id] = onHand;
+    }
+  }
+
+  return quantities;
+}
+
 export async function getActiveLocations(admin) {
   const locations = [];
   let after = null;

@@ -17,8 +17,10 @@ import {
   addProductToInventoryCount,
   removeInventoryCountLines,
   scanInventoryCountBarcode,
+  refreshReviewInventory,
 } from "../features/inventory-counts/services/inventory-count-workflow.server";
 import {
+  getCurrentInventoryQuantities,
   getShopifyVariantForAddition,
   getShopifyVariantByExactBarcode,
   searchShopifyVariants,
@@ -149,7 +151,26 @@ export const action = async ({ request, params }) => {
         commitUncounted: intent === "commit-and-finish",
       });
       if (warning) return { finishWarning: warning };
-      return redirect(`/app/inventory-counts/${countId}`);
+      try {
+        const reviewCount = await getInventoryCount(session.shop, countId);
+        if (!reviewCount || reviewCount.status !== "REVIEW") {
+          throw new Error("The inventory count did not enter review.");
+        }
+        const quantities = await getCurrentInventoryQuantities(
+          admin,
+          reviewCount.locationId,
+          reviewCount.lines.map((line) => line.inventoryItemId),
+        );
+        await refreshReviewInventory({ shop: session.shop, countId, quantities });
+        return redirect(`/app/inventory-counts/${countId}?reviewRefresh=success`);
+      } catch (refreshError) {
+        console.error("Initial Shopify review inventory refresh failed", {
+          shop: session.shop,
+          countId,
+          message: refreshError.message,
+        });
+        return redirect(`/app/inventory-counts/${countId}?reviewRefresh=failed`);
+      }
     }
     return { error: "Choose a valid inventory count action." };
   } catch (error) {

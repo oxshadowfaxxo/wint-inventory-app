@@ -18,6 +18,10 @@
   text-align: left;
 }
 
+.reviewTable {
+  min-width: 1220px;
+}
+
 .table th,
 .table td {
   padding: 8px 12px;

@@ -18,8 +18,10 @@ import {
 import { formatInventoryCountNumber } from "../features/inventory-counts/utils/inventory-count-number";
 import {
   friendlyWorkflowError,
+  refreshReviewInventory,
   transitionInventoryCount,
 } from "../features/inventory-counts/services/inventory-count-workflow.server";
+import { getCurrentInventoryQuantities } from "../features/inventory-counts/services/shopify-inventory.server";
 
 const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
@@ -27,7 +29,7 @@ const dateTimeFormatter = new Intl.DateTimeFormat(undefined, {
 });
 
 function formatDateTime(value) {
-  return value ? dateTimeFormatter.format(new Date(value)) : "Not started";
+  return value ? dateTimeFormatter.format(new Date(value)) : "—";
 }
 
 function formatVariance(variance) {
@@ -56,16 +58,49 @@ export const loader = async ({ request, params }) => {
         progress.totalQuantity,
       ),
     },
+    initialRefreshFailed:
+      new URL(request.url).searchParams.get("reviewRefresh") === "failed",
   };
 };
 
 export const action = async ({ request, params }) => {
-  const { session, redirect } = await authenticate.admin(request);
+  const { admin, session, redirect } = await authenticate.admin(request);
   const formData = await request.formData();
   const intent = String(formData.get("intent") || "");
   const countId = params.countId;
   if (!countId) return { error: "Inventory count not found." };
   try {
+    if (intent === "refresh-shopify-inventory") {
+      const count = await getInventoryCount(session.shop, countId);
+      if (!count) return { error: "Inventory count not found." };
+      if (count.status !== "REVIEW") {
+        return { error: "This count is no longer in review." };
+      }
+      let quantities;
+      try {
+        quantities = await getCurrentInventoryQuantities(
+          admin,
+          count.locationId,
+          count.lines.map((line) => line.inventoryItemId),
+        );
+      } catch (shopifyError) {
+        console.error("Manual Shopify review inventory refresh failed", {
+          shop: session.shop,
+          countId,
+          message: shopifyError.message,
+        });
+        return {
+          error:
+            "Shopify quantities could not be refreshed. Any previous review snapshot was preserved; please try again.",
+        };
+      }
+      await refreshReviewInventory({
+        shop: session.shop,
+        countId,
+        quantities,
+      });
+      return { message: "Shopify quantities refreshed." };
+    }
     if (intent === "continue" || intent === "return-to-counting") {
       await transitionInventoryCount({
         shop: session.shop,
@@ -94,18 +129,59 @@ export const action = async ({ request, params }) => {
 };
 
 export default function InventoryCountDetailPage() {
-  const { count } = useLoaderData();
+  const { count, initialRefreshFailed } = useLoaderData();
   const actionData = useActionData();
   const navigate = useNavigate();
 
   return (
     <s-page heading={`Count: ${count.countNumber}`}>
-      <s-button
-        slot="secondary-actions"
-        onClick={() => navigate("/app/inventory-counts")}
-      >
-        Back to Counts
-      </s-button>
+      {count.status === "REVIEW" ? (
+        <>
+          <s-button
+            slot="secondary-actions"
+            onClick={() =>
+              document
+                .getElementById("refresh-shopify-form")
+                ?.requestSubmit()
+            }
+          >
+            Refresh Shopify Quantities
+          </s-button>
+          <Form method="post" id="refresh-shopify-form" hidden>
+            <input
+              type="hidden"
+              name="intent"
+              value="refresh-shopify-inventory"
+            />
+          </Form>
+          <s-button
+            slot="secondary-actions"
+            onClick={() =>
+              document
+                .getElementById("return-to-counting-form")
+                ?.requestSubmit()
+            }
+          >
+            Return to Counting
+          </s-button>
+          <Form method="post" id="return-to-counting-form" hidden>
+            <input type="hidden" name="intent" value="return-to-counting" />
+          </Form>
+          <s-button
+            slot="secondary-actions"
+            onClick={() => navigate("/app/inventory-counts")}
+          >
+            Back to Counts
+          </s-button>
+        </>
+      ) : (
+        <s-button
+          slot="secondary-actions"
+          onClick={() => navigate("/app/inventory-counts")}
+        >
+          Back to Counts
+        </s-button>
+      )}
       {count.status === "DRAFT" && (
         <>
           <s-button
@@ -136,6 +212,14 @@ export default function InventoryCountDetailPage() {
       {actionData?.error && (
         <s-banner tone="critical">{actionData.error}</s-banner>
       )}
+      {initialRefreshFailed && !actionData?.message && !actionData?.error && (
+        <s-banner tone="critical">
+          Shopify quantities could not be refreshed. The count remains in review; try again below.
+        </s-banner>
+      )}
+      {actionData?.message && (
+        <s-banner tone="success">{actionData.message}</s-banner>
+      )}
 
       <s-section heading="Count summary">
         <s-stack direction="block" gap="base">
@@ -159,12 +243,13 @@ export default function InventoryCountDetailPage() {
                   )
                   .join(", ")}
           </s-text>}
-          <s-stack direction="inline" gap="large">
+          <div className={detailStyles.timestamps}>
             <s-text>Started: {formatDateTime(count.startedAt)}</s-text>
-            {count.completedAt && (
-              <s-text>Completed: {formatDateTime(count.completedAt)}</s-text>
-            )}
-          </s-stack>
+            <s-text>
+              Refreshed: {formatDateTime(count.reviewInventoryRefreshedAt)}
+            </s-text>
+            <s-text>Completed: {formatDateTime(count.completedAt)}</s-text>
+          </div>
           <s-stack direction="inline" gap="large">
             <s-text>{count.countType === "BLANK_SCAN" ? `Unique variants added: ${count.progress.totalProducts}` : `Products: ${count.progress.productsCounted} of ${count.progress.totalProducts}`}</s-text>
             <s-text>{count.countType === "BLANK_SCAN" ? `Total physically counted quantity: ${count.progress.quantityCounted}` : `Quantity: ${count.progress.quantityCounted} of ${count.progress.totalQuantity}`}</s-text>
@@ -200,10 +285,6 @@ export default function InventoryCountDetailPage() {
             <s-text>
               Shopify inventory adjustments are not available yet.
             </s-text>
-            <Form method="post">
-              <input type="hidden" name="intent" value="return-to-counting" />
-              <s-button type="submit">Return to counting</s-button>
-            </Form>
           </s-stack>
         </s-section>
       )}
@@ -212,7 +293,7 @@ export default function InventoryCountDetailPage() {
         {count.lines.length === 0 ? (
           <s-paragraph>No products in this inventory count.</s-paragraph>
         ) : (
-          <CountLinesTable lines={count.lines} />
+          <CountLinesTable lines={count.lines} countStatus={count.status} />
         )}
       </s-section>
 

@@ -1,3 +1,13 @@
 .notes {
   white-space: pre-wrap;
 }
+
+.timestamps {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.timestamps {
+  gap: 8px 24px;
+}

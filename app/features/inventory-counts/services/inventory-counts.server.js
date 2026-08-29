@@ -58,11 +58,13 @@ export async function getInventoryCount(shop, countId) {
       createdBy: true,
       startedAt: true,
       completedAt: true,
+      reviewInventoryRefreshedAt: true,
       archivedAt: true,
       notes: true,
       lines: {
         select: {
           id: true,
+          inventoryItemId: true,
           variantId: true,
           productTitle: true,
           variantTitle: true,
@@ -70,6 +72,8 @@ export async function getInventoryCount(shop, countId) {
           barcode: true,
           startingQuantity: true,
           countedQuantity: true,
+          reviewShopifyQuantity: true,
+          reviewShopifyRefreshedAt: true,
           status: true,
           committedUncounted: true,
           firstScannedAt: true,

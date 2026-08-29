@@ -15,21 +15,21 @@ datasource db {
 }
 
 model Session {
-  id            String    @id
-  shop          String
-  state         String
-  isOnline      Boolean   @default(false)
-  scope         String?
-  expires       DateTime?
-  accessToken   String
-  userId        BigInt?
-  firstName     String?
-  lastName      String?
-  email         String?
-  accountOwner  Boolean   @default(false)
-  locale        String?
-  collaborator  Boolean?  @default(false)
-  emailVerified Boolean?  @default(false)
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
@@ -56,56 +56,59 @@ enum InventoryCountType {
 }
 
 model InventoryCount {
-  id           String               @id @default(cuid())
-  shop         String
-  countNumber  Int
-  name         String
-  locationId   String
-  locationName String
-  area         String
-  productTypes Json
-  countType    InventoryCountType   @default(PRODUCT_TYPE)
-  status       InventoryCountStatus @default(DRAFT)
-  createdBy    String?
-  startedAt    DateTime?
-  completedAt  DateTime?
-  archivedAt   DateTime?
-  notes        String?
-  createdAt    DateTime             @default(now())
-  updatedAt    DateTime             @updatedAt
-  lines        InventoryCountLine[]
-  scanEvents   InventoryScanEvent[]
+  id                         String               @id @default(cuid())
+  shop                       String
+  countNumber                Int
+  name                       String
+  locationId                 String
+  locationName               String
+  area                       String
+  productTypes               Json
+  countType                  InventoryCountType   @default(PRODUCT_TYPE)
+  status                     InventoryCountStatus @default(DRAFT)
+  createdBy                  String?
+  startedAt                  DateTime?
+  completedAt                DateTime?
+  reviewInventoryRefreshedAt DateTime?
+  archivedAt                 DateTime?
+  notes                      String?
+  createdAt                  DateTime             @default(now())
+  updatedAt                  DateTime             @updatedAt
+  lines                      InventoryCountLine[]
+  scanEvents                 InventoryScanEvent[]
 
+  @@unique([shop, countNumber])
   @@index([shop, locationId])
   @@index([shop, status])
   @@index([shop, archivedAt])
-  @@unique([shop, countNumber])
 }
 
 model InventoryCountLine {
-  id                 String              @id @default(cuid())
-  inventoryCountId   String
-  inventoryItemId    String
-  productId          String
-  variantId          String
-  productTitle       String
-  variantTitle       String?
-  vendor             String?
-  productType        String?
-  sku                String?
-  barcode            String?
-  startingQuantity   Int?
-  countedQuantity    Int                 @default(0)
-  committedUncounted Boolean             @default(false)
-  approvedQuantity   Int?
-  status             InventoryLineStatus @default(UNCOUNTED)
-  note               String?
-  firstScannedAt     DateTime?
-  lastScannedAt      DateTime?
-  createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
-  inventoryCount     InventoryCount      @relation(fields: [inventoryCountId], references: [id], onDelete: Cascade)
-  scanEvents         InventoryScanEvent[]
+  id                       String               @id @default(cuid())
+  inventoryCountId         String
+  inventoryItemId          String
+  productId                String
+  variantId                String
+  productTitle             String
+  variantTitle             String?
+  vendor                   String?
+  productType              String?
+  sku                      String?
+  barcode                  String?
+  startingQuantity         Int?
+  countedQuantity          Int                  @default(0)
+  committedUncounted       Boolean              @default(false)
+  approvedQuantity         Int?
+  reviewShopifyQuantity    Int?
+  reviewShopifyRefreshedAt DateTime?
+  status                   InventoryLineStatus  @default(UNCOUNTED)
+  note                     String?
+  firstScannedAt           DateTime?
+  lastScannedAt            DateTime?
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
+  inventoryCount           InventoryCount       @relation(fields: [inventoryCountId], references: [id], onDelete: Cascade)
+  scanEvents               InventoryScanEvent[]
 
   @@unique([inventoryCountId, inventoryItemId])
   @@index([inventoryCountId])
