@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   Form,
   useActionData,
@@ -141,6 +142,7 @@ export const action = async ({ request, params }) => {
         shop: session.shop,
         countId,
         transition: "save",
+        notes: formData.has("notes") ? String(formData.get("notes")) : undefined,
       });
       return redirect(`/app/inventory-counts/${countId}`);
     }
@@ -149,6 +151,7 @@ export const action = async ({ request, params }) => {
         shop: session.shop,
         countId,
         commitUncounted: intent === "commit-and-finish",
+        notes: formData.has("notes") ? String(formData.get("notes")) : undefined,
       });
       if (warning) return { finishWarning: warning };
       try {
@@ -190,33 +193,94 @@ export default function InventoryCountCountingPage() {
   const { count } = useLoaderData();
   const actionData = useActionData();
   const navigate = useNavigate();
+  // Keep local edits through scan/search revalidation, but not across counts.
+  const [notesDraft, setNotesDraft] = useState({
+    countId: count.id,
+    value: count.notes ?? "",
+  });
+  if (notesDraft.countId !== count.id) {
+    setNotesDraft({ countId: count.id, value: count.notes ?? "" });
+  }
+  const notes = notesDraft.countId === count.id ? notesDraft.value : count.notes ?? "";
+  // Match the existing 50rem responsive convention. Remove desktop actions
+  // from the DOM so App Bridge cannot retain a separate compact primary action.
+  const [compactActions, setCompactActions] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 50rem)");
+    const update = () => setCompactActions(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
+  const continueCounting = () =>
+    navigate(`/app/inventory-counts/${count.id}/count`, { replace: true });
+
   return (
     <s-page heading={`Count: ${count.displayNumber}`}>
       <s-badge slot="accessory" tone="info">
         COUNTING
       </s-badge>
-      <s-button
-        slot="secondary-actions"
-        onClick={() =>
-          document.getElementById("save-count-form")?.requestSubmit()
-        }
-      >
-        Save &amp; Exit
-      </s-button>
-      <s-button
-        slot="primary-action"
-        variant="primary"
-        onClick={() =>
-          document.getElementById("finish-count-form")?.requestSubmit()
-        }
-      >
-        Finish Counting
-      </s-button>
+      {compactActions ? (
+        <>
+          <s-button
+            slot="secondary-actions"
+            icon="menu-horizontal"
+            accessibilityLabel="Count actions"
+            commandFor="count-actions-menu"
+          />
+          <s-menu id="count-actions-menu" accessibilityLabel="Count actions">
+            <s-section>
+              {actionData?.finishWarning && (
+                <s-button onClick={continueCounting}>Continue Counting</s-button>
+              )}
+              <s-button
+                onClick={() =>
+                  document.getElementById("save-count-form")?.requestSubmit()
+                }
+              >
+                Save &amp; Quit
+              </s-button>
+            </s-section>
+            <s-section>
+              <s-button
+                onClick={() =>
+                  document.getElementById("finish-count-form")?.requestSubmit()
+                }
+              >
+                Finish Counting
+              </s-button>
+            </s-section>
+          </s-menu>
+        </>
+      ) : (
+        <>
+          <s-button
+            slot="secondary-actions"
+            onClick={() =>
+              document.getElementById("save-count-form")?.requestSubmit()
+            }
+          >
+            Save &amp; Exit
+          </s-button>
+          <s-button
+            slot="primary-action"
+            variant="primary"
+            onClick={() =>
+              document.getElementById("finish-count-form")?.requestSubmit()
+            }
+          >
+            Finish Counting
+          </s-button>
+        </>
+      )}
       <Form method="post" id="save-count-form" hidden>
         <input type="hidden" name="intent" value="save" />
+        <input type="hidden" name="notes" value={notes} />
       </Form>
       <Form method="post" id="finish-count-form" hidden>
         <input type="hidden" name="intent" value="finish" />
+        <input type="hidden" name="notes" value={notes} />
       </Form>
       {actionData?.error && (
         <s-banner tone="critical">
@@ -244,16 +308,13 @@ export default function InventoryCountCountingPage() {
           </s-banner>
           <Form method="post">
             <input type="hidden" name="intent" value="commit-and-finish" />
+            <input type="hidden" name="notes" value={notes} />
             <s-stack direction="inline" gap="base">
-              <s-button
-                onClick={() =>
-                  navigate(`/app/inventory-counts/${count.id}/count`, {
-                    replace: true,
-                  })
-                }
-              >
-                Go Back and Continue Counting
-              </s-button>
+              {!compactActions && (
+                <s-button onClick={continueCounting}>
+                  Go Back and Continue Counting
+                </s-button>
+              )}
               <s-button variant="primary" type="submit">
                 Commit Uncounted Items and Finish
               </s-button>
@@ -272,7 +333,15 @@ export default function InventoryCountCountingPage() {
       />
 
       <s-section heading="Notes">
-        <s-paragraph>{count.notes?.trim() || "No notes added."}</s-paragraph>
+        <s-text-area
+          label="Notes"
+          labelAccessibilityVisibility="exclusive"
+          rows={4}
+          value={notes}
+          onInput={(event) =>
+            setNotesDraft({ countId: count.id, value: event.currentTarget.value })
+          }
+        />
       </s-section>
 
     </s-page>

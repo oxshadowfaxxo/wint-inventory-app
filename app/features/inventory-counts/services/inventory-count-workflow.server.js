@@ -14,7 +14,7 @@ const transitionTargets = {
   complete: { from: ["REVIEW"], to: "COMPLETED" },
 };
 
-export async function transitionInventoryCount({ shop, countId, transition }) {
+export async function transitionInventoryCount({ shop, countId, transition, notes }) {
   const rule = transitionTargets[transition];
   if (!rule) throw new InventoryCountWorkflowError("Unknown inventory count action.");
 
@@ -22,6 +22,7 @@ export async function transitionInventoryCount({ shop, countId, transition }) {
     where: { id: countId, shop, status: { in: rule.from } },
     data: {
       status: rule.to,
+      ...(transition === "save" && typeof notes === "string" ? { notes } : {}),
       ...(rule.to === "COMPLETED" ? { completedAt: new Date() } : {}),
     },
   });
@@ -63,7 +64,7 @@ export async function getUncountedSummary(shop, countId) {
   };
 }
 
-export async function finishInventoryCount({ shop, countId, commitUncounted }) {
+export async function finishInventoryCount({ shop, countId, commitUncounted, notes }) {
   return prisma.$transaction(async (tx) => {
     const count = await tx.inventoryCount.findFirst({
       where: { id: countId, shop, status: "COUNTING" },
@@ -86,7 +87,20 @@ export async function finishInventoryCount({ shop, countId, commitUncounted }) {
         0,
       ),
     };
-    if (summary.variants > 0 && !commitUncounted) return summary;
+    if (summary.variants > 0 && !commitUncounted) {
+      if (typeof notes === "string") {
+        const saved = await tx.inventoryCount.updateMany({
+          where: { id: countId, shop, status: "COUNTING" },
+          data: { notes },
+        });
+        if (saved.count !== 1) {
+          throw new InventoryCountWorkflowError(
+            "This count is no longer in counting mode.",
+          );
+        }
+      }
+      return summary;
+    }
 
     if (summary.variants > 0) {
       await tx.inventoryCountLine.updateMany({
@@ -100,7 +114,7 @@ export async function finishInventoryCount({ shop, countId, commitUncounted }) {
     }
     const updated = await tx.inventoryCount.updateMany({
       where: { id: countId, shop, status: "COUNTING" },
-      data: { status: "REVIEW" },
+      data: { status: "REVIEW", ...(typeof notes === "string" ? { notes } : {}) },
     });
     if (updated.count !== 1) {
       throw new InventoryCountWorkflowError(

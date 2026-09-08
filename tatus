@@ -1,0 +1,18 @@
+[33mcommit e2c774e62a84106fea417487f95be697a51e6fd9[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mv0.3[m[33m, [m[1;31morigin/v0.3[m[33m)[m
+Author: oxshadowfaxxo <bsperling9@gmail.com>
+Date:   Sat Aug 29 15:51:09 2026 -0400
+
+    Add Shopify inventory refresh to review workflow
+
+ .../components/CountLinesTable.jsx                 |  53 [32m+++++++[m[31m--[m
+ .../components/count-detail.module.css             |  10 [32m++[m
+ .../components/count-lines-table.module.css        |   4 [32m+[m
+ .../services/inventory-count-workflow.server.js    |  38 [32m+++++++[m
+ .../services/inventory-counts.server.js            |   4 [32m+[m
+ .../services/shopify-inventory.server.js           |  45 [32m++++++++[m
+ .../inventory-counts/utils/inventory-count-sort.js |  19 [32m+++[m[31m-[m
+ app/routes/app.inventory-counts.$countId.jsx       | 119 [32m+++++++++++++++++[m[31m----[m
+ .../app.inventory-counts.$countId_.count.jsx       |  23 [32m+++[m[31m-[m
+ .../migration.sql                                  |   8 [32m++[m
+ prisma/schema.prisma                               | 119 [32m+++++++++++[m[31m----------[m
+ 11 files changed, 352 insertions(+), 90 deletions(-)

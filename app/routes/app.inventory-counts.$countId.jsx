@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import {
   Form,
   isRouteErrorResponse,
@@ -132,48 +133,52 @@ export default function InventoryCountDetailPage() {
   const { count, initialRefreshFailed } = useLoaderData();
   const actionData = useActionData();
   const navigate = useNavigate();
+  const [compactActions, setCompactActions] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia("(max-width: 50rem)");
+    const update = () => setCompactActions(query.matches);
+    update();
+    query.addEventListener("change", update);
+    return () => query.removeEventListener("change", update);
+  }, []);
+
+  // Desktop buttons must remain direct children of s-page, without a DOM wrapper.
+  const reviewActions = [
+    {
+      label: "Refresh Shopify Quantities",
+      onClick: () => document.getElementById("refresh-shopify-form")?.requestSubmit(),
+    },
+    {
+      label: "Return to Counting",
+      onClick: () => document.getElementById("return-to-counting-form")?.requestSubmit(),
+    },
+    { label: "Back to Counts", onClick: () => navigate("/app/inventory-counts") },
+  ].map(({ label, onClick }) => (
+    <s-button
+      key={label}
+      slot={compactActions ? undefined : "secondary-actions"}
+      onClick={onClick}
+    >
+      {label}
+    </s-button>
+  ));
 
   return (
     <s-page heading={`Count: ${count.countNumber}`}>
       {count.status === "REVIEW" ? (
-        <>
-          <s-button
-            slot="secondary-actions"
-            onClick={() =>
-              document
-                .getElementById("refresh-shopify-form")
-                ?.requestSubmit()
-            }
-          >
-            Refresh Shopify Quantities
-          </s-button>
-          <Form method="post" id="refresh-shopify-form" hidden>
-            <input
-              type="hidden"
-              name="intent"
-              value="refresh-shopify-inventory"
+        compactActions ? (
+          <>
+            <s-button
+              slot="secondary-actions"
+              icon="menu-horizontal"
+              accessibilityLabel="Count actions"
+              commandFor="review-count-actions-menu"
             />
-          </Form>
-          <s-button
-            slot="secondary-actions"
-            onClick={() =>
-              document
-                .getElementById("return-to-counting-form")
-                ?.requestSubmit()
-            }
-          >
-            Return to Counting
-          </s-button>
-          <Form method="post" id="return-to-counting-form" hidden>
-            <input type="hidden" name="intent" value="return-to-counting" />
-          </Form>
-          <s-button
-            slot="secondary-actions"
-            onClick={() => navigate("/app/inventory-counts")}
-          >
-            Back to Counts
-          </s-button>
-        </>
+            <s-menu id="review-count-actions-menu" accessibilityLabel="Count actions">
+              {reviewActions}
+            </s-menu>
+          </>
+        ) : reviewActions
       ) : (
         <s-button
           slot="secondary-actions"
@@ -181,6 +186,20 @@ export default function InventoryCountDetailPage() {
         >
           Back to Counts
         </s-button>
+      )}
+      {count.status === "REVIEW" && (
+        <>
+          <Form method="post" id="refresh-shopify-form" hidden>
+            <input
+              type="hidden"
+              name="intent"
+              value="refresh-shopify-inventory"
+            />
+          </Form>
+          <Form method="post" id="return-to-counting-form" hidden>
+            <input type="hidden" name="intent" value="return-to-counting" />
+          </Form>
+        </>
       )}
       {count.status === "DRAFT" && (
         <>

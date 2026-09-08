@@ -65,6 +65,7 @@ export async function getInventoryCount(shop, countId) {
         select: {
           id: true,
           inventoryItemId: true,
+          productId: true,
           variantId: true,
           productTitle: true,
           variantTitle: true,

@@ -1,6 +1,7 @@
 /* eslint-disable react/prop-types */
 
 import styles from "./count-lines-table.module.css";
+import { ProductTitleLink } from "./ProductTitleLink";
 import { SortableTableHeader } from "./SortableTableHeader";
 import { useInventoryCountSort } from "../hooks/useInventoryCountSort";
 
@@ -46,7 +47,9 @@ export function CountLinesTable({ lines, countStatus }) {
           <tbody>
           {sortedLines.map((line) => (
             <tr key={line.id}>
-              <td className={styles.product}>{line.productTitle}</td>
+              <td className={styles.product}>
+                <ProductTitleLink productId={line.productId} productTitle={line.productTitle} />
+              </td>
               <td>{line.variantTitle || "—"}</td>
               <td>{line.sku || "—"}</td>
               <td>{line.barcode || "—"}</td>

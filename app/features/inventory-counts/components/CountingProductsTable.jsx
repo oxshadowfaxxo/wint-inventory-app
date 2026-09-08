@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFetcher } from "react-router";
 import { QuantityControl } from "./QuantityControl";
+import { ProductTitleLink } from "./ProductTitleLink";
 import { ScanOrSearchInput } from "./ScanOrSearchInput";
 import { SortableTableHeader } from "./SortableTableHeader";
 import { useInventoryCountSort } from "../hooks/useInventoryCountSort";
@@ -282,7 +283,7 @@ export function CountingProductsTable({ countId, countType, lines }) {
                   <td
                     className={`${styles.product} ${selectionMode ? styles.productWithSelection : ""}`}
                   >
-                    {line.productTitle}
+                    <ProductTitleLink productId={line.productId} productTitle={line.productTitle} />
                   </td>
                   <td>{line.variantTitle || "—"}</td>
                   <td>{line.sku || "—"}</td>
