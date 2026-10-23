@@ -1,0 +1,43 @@
+.panel {
+  padding: 16px;
+  border: 1px solid #d8d8d8;
+  border-radius: 8px;
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  min-width: 0;
+}
+
+.field {
+  display: grid;
+  gap: 6px;
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.field select,
+.field input {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  padding: 8px;
+  border: 1px solid #8a8a8a;
+  border-radius: 6px;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+}
+
+@media (max-width: 35rem) {
+  .field {
+    flex-basis: 100%;
+  }
+}

@@ -16,12 +16,22 @@ function formatSigned(value) {
   return value > 0 ? `+${value}` : String(value);
 }
 
-export function CountLinesTable({ lines, countStatus }) {
+export function CountLinesTable({
+  lines,
+  countStatus,
+  sortingDisabled = false,
+  viewSort = null,
+}) {
   const isReview = countStatus === "REVIEW";
-  const { sort, sortedLines, toggleSort, resetSort } = useInventoryCountSort(lines);
+  const local = useInventoryCountSort(lines);
+  const sort = sortingDisabled ? viewSort : local.sort;
+  const sortedLines = sortingDisabled ? lines : local.sortedLines;
+  const toggleSort = sortingDisabled ? undefined : local.toggleSort;
   return (
     <s-stack direction="block" gap="base">
-      {sort && <s-button onClick={resetSort}>Reset Sort</s-button>}
+      {!sortingDisabled && sort && (
+        <s-button onClick={local.resetSort}>Reset Sort</s-button>
+      )}
       <div className={styles.container}>
         <table className={`${styles.table} ${isReview ? styles.reviewTable : ""}`}>
           <thead>

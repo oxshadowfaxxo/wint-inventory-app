@@ -10,6 +10,7 @@ import {
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { CountLinesTable } from "../features/inventory-counts/components/CountLinesTable";
+import { ReviewCountProducts } from "../features/inventory-counts/components/ReviewCountProducts";
 import detailStyles from "../features/inventory-counts/components/count-detail.module.css";
 import { getInventoryCount } from "../features/inventory-counts/services/inventory-counts.server";
 import {
@@ -311,8 +312,10 @@ export default function InventoryCountDetailPage() {
       <s-section heading="Products">
         {count.lines.length === 0 ? (
           <s-paragraph>No products in this inventory count.</s-paragraph>
+        ) : count.status === "REVIEW" ? (
+          <ReviewCountProducts key={count.id} lines={count.lines} />
         ) : (
-          <CountLinesTable lines={count.lines} countStatus={count.status} />
+          <CountLinesTable key={count.id} lines={count.lines} countStatus={count.status} />
         )}
       </s-section>
 

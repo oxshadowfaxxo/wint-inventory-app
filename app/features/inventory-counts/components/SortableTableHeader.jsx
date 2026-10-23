@@ -21,15 +21,17 @@ export function SortableTableHeader({
       className={className}
       aria-sort={direction === "asc" ? "ascending" : direction === "desc" ? "descending" : "none"}
     >
-      <button
-        type="button"
-        className={styles.sortButton}
-        onClick={() => onSort(column)}
-        aria-label={`Sort ${label} ${nextAction}`}
-      >
-        <span>{label}</span>
-        <span aria-hidden="true">{direction === "asc" ? "↑" : direction === "desc" ? "↓" : "⇅"}</span>
-      </button>
+      {!onSort ? label : (
+        <button
+          type="button"
+          className={styles.sortButton}
+          onClick={() => onSort(column)}
+          aria-label={`Sort ${label} ${nextAction}`}
+        >
+          <span>{label}</span>
+          <span aria-hidden="true">{direction === "asc" ? "↑" : direction === "desc" ? "↓" : "⇅"}</span>
+        </button>
+      )}
     </th>
   );
 }

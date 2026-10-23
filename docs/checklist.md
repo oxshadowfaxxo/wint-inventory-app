@@ -1,6 +1,6 @@
 # Winterthur Inventory App --- Build Checklist
 
-**Updated: August 14, 2026**
+**Updated: September 8, 2026 — v0.3**
 
 ## Phase 1 --- Application Foundation ✅
 
@@ -36,6 +36,8 @@
 -   [x] Archive counts
 -   [x] Hide archived counts by default
 -   [x] Show archived counts option
+-   [x] Archived-only status view
+-   [x] Multi-select counts and archive selected counts
 -   [x] Restore/unarchive counts
 -   [x] Remove Cancel Count workflow
 -   [x] Preserve historical CANCELLED records
@@ -48,6 +50,8 @@
 -   [x] Continue Counting
 -   [x] Move primary actions into page header
 -   [x] Keep completed counts read-only
+-   [x] Product titles link directly to the Shopify Admin product page
+-   [x] Responsive tablet/mobile action menus for count and review screens
 
 ## Phase 3 --- Create New Inventory Count ✅
 
@@ -63,6 +67,8 @@
 -   [x] Create frozen inventory snapshot
 -   [x] Preview count before counting
 -   [x] Start count in COUNTING mode
+-   [x] Support Product Type counts
+-   [x] Support Blank Scan counts without a preloaded product sheet
 
 ## Phase 4 --- Active Counting Workflow 🟢
 
@@ -116,7 +122,9 @@
 -   [x] Remove separate Counting Actions card
 -   [x] Save & Exit in page header
 -   [x] Finish Counting in page header
--   [ ] Final counting-screen UI polish
+-   [x] Tablet/mobile three-dot action menu at ≤50rem
+-   [x] Preserve direct header actions on desktop
+-   [ ] Final counting-screen UI polish after employee testing
 
 ## Phase 5 --- Barcode Scanning 🟢
 
@@ -147,16 +155,17 @@
 ### Future Scanner Features
 
 -   [ ] Camera barcode scanning
--   [ ] Optional scan success/error sounds - do not need
+-   [x] Scan success/error sounds intentionally excluded from scope
 -   [ ] Quick-add unknown barcode from Shopify
--   [ ] Scanner performance testing with production-size counts
--   [ ] Physical scanner testing
+-   [x] Scanner performance testing with production-size counts
+-   [x] Physical scanner testing
 
-## Phase 6 --- Review & Reconciliation ⏭ NEXT MAJOR FUNCTIONAL MILESTONE
+## Phase 6 --- Review & Reconciliation 🟢 IN PROGRESS
 
 ### Variance Review
 
--   [ ] Dedicated variance review interface
+-   [x] Review-state product table with reconciliation columns
+-   [ ] Dedicated variance filtering interface
 -   [ ] Filter over-counted, under-counted, exact-match, and uncounted
     products
 -   [ ] Sort by largest variance
@@ -168,11 +177,16 @@
 
 ### Inventory Verification
 
--   [ ] Refresh current Shopify inventory before adjustment
--   [ ] Compare original Shopify quantity, physical counted quantity,
-    and current Shopify quantity
--   [ ] Detect Shopify inventory changes during counting
--   [ ] Flag conflicts before adjustment
+-   [x] Automatically refresh current Shopify inventory when entering Review
+-   [x] Manual Refresh Shopify Quantities action
+-   [x] Store review refresh timestamp
+-   [x] Store refreshed Shopify quantity per count line
+-   [x] Compare starting Shopify quantity, physical counted quantity, and
+    current Shopify quantity
+-   [x] Display Shopify Change since the count started
+-   [x] Display Review Variance against current Shopify quantity
+-   [x] Allow return from REVIEW to COUNTING
+-   [ ] Add explicit conflict flags for Shopify inventory changes during counting
 -   [ ] Adjustment preview
 
 ### Approval
@@ -181,7 +195,9 @@
 -   [ ] Approve multiple adjustments
 -   [ ] Reject/ignore adjustment
 -   [ ] Final adjustment confirmation
--   [ ] Prevent accidental Shopify writes
+-   [x] Keep Shopify inventory-write action disabled in v0.3
+-   [x] Allow completion without changing Shopify inventory, with confirmation
+-   [ ] Prevent accidental Shopify writes once adjustment mutations are enabled
 
 ## Phase 7 --- Shopify Inventory Updates
 
@@ -275,12 +291,13 @@
 
 ## Current Development Priority
 
-1.  **Finish remaining counting-screen UI polish**
-2.  **Test barcode scanning with a physical scanner**
-3.  **Build Variance Review**
-4.  **Build recount/discrepancy workflow**
-5.  **Build CSV audit export**
-6.  **Only then enable Shopify inventory adjustments**
+1.  **Employee-test the v0.3 counting and responsive tablet workflow**
+2.  **Test barcode scanning with a physical scanner and production-size counts**
+3.  **Add variance filters, conflict flags, and discrepancy review controls**
+4.  **Build selected-product recount/discrepancy workflow**
+5.  **Build adjustment approval/preview workflow**
+6.  **Build CSV audit export**
+7.  **Only then enable Shopify inventory adjustments**
 
 ## Current Overall Status
 
@@ -288,8 +305,43 @@
 **Count management:** Complete\
 **Count creation:** Complete\
 **Manual counting:** Complete\
-**Barcode core:** Complete / testing & polish remaining\
-**Reconciliation:** Not started\
+**Barcode core:** Complete / physical testing & polish remaining\
+**Responsive count workflow:** Implemented in v0.3 / employee testing remaining\
+**Review & reconciliation:** In progress — Shopify refresh and comparison implemented\
 **Shopify inventory writes:** Intentionally disabled\
 **Audit/reporting:** Not started\
 **POS integration:** Future milestone
+
+## v0.4 — Barcode Error Sound
+
+- [x] Settings page at `/app/settings`, available in embedded app navigation.
+- [x] Scanner & Audio controls: Enable Error Sound, 0–100% volume, and Test Error Sound.
+- [x] Defaults: enabled, 70%; automatic device/browser-specific localStorage using `winterthur-inventory:barcode-error-audio:v1`.
+- [x] Safe SSR and blocked-storage fallback; preferences remain usable in memory if persistence is unavailable.
+- [x] Two low 220 Hz tones, 150 ms each with an 80 ms pause; no application success sound.
+- [x] Scanner and manual barcode validation failures use the same error sound; unrelated errors remain silent.
+- [x] Explicit unmatched local submissions sound once; typing/searching alone remains silent. Existing Product Type search behavior is preserved without adding Shopify lookups.
+- [x] Server barcode validation codes and duplicate barcode responses trigger audio only after processing finishes.
+- [x] User gestures initialize audio; unsupported/blocked audio cannot interrupt counting. Alerts during an active pair are skipped to avoid overlap/backlogs.
+- [x] Scanner configuration, hardware beep, count persistence, quantity operations, and Shopify inventory writes unchanged.
+- [ ] Physical S700 and desktop/tablet browser listening tests, including volume, device independence, refresh/reopen persistence, and autoplay policies.
+
+Manual verification: open Settings, preview the pair, change volume, disable and preview (silent), then refresh/reopen to verify preferences. On a second browser/device verify the enabled/70% defaults. In counting mode scan and manually submit valid and invalid barcodes, including an outside-count product and a duplicate barcode. Successful counts must stay silent, validation failures must alert once, and rapid failures must not overlap. Verify quantity/highlight/persistence and review flows still work. Browser/OS mute, autoplay policy, or unavailable Web Audio can prevent audible playback; storage restrictions can prevent persistence. No scanner identification is needed.
+
+## v0.4 — Review Count Filtering & Sorting
+
+- [x] Collapsed-by-default Filters panel above the Review Count table, with responsive wrapping controls.
+- [x] Show Only: All Products, Variances Only, Shortages Only, Overages Only, Matches Only, and Not Counted.
+- [x] Multiple removable Quantity Variance, Shopify Quantity, Counted Quantity, and Count Status conditions; numeric comparisons require a valid value.
+- [x] ALL (AND) or ANY (OR) among custom conditions, always within the Show Only selection.
+- [x] Apply Filters applies draft filters and sorting together; collapsing preserves selections. Clear All immediately resets the complete view and original line order.
+- [x] Product Title, SKU, Shopify Quantity, Counted Quantity, Quantity Variance, and Absolute Variance sorting in either direction, using existing stable sorting logic. Original Order preserves the existing default.
+- [x] Review sorting controls are confined to the Filters panel; other tables retain their existing sortable headers.
+- [x] Shopify Quantity uses `reviewShopifyQuantity`; Quantity Variance remains Counted minus Current Shopify. Missing snapshot quantities remain unknown and do not satisfy numeric/variance conditions. Sorting retains the existing null ordering.
+- [x] Not Counted uses `UNCOUNTED` status, including committed-as-uncounted lines; an explicitly counted zero remains Counted.
+- [x] Filters operate on the full loaded review dataset, display a clear empty state, and live only in component state. No storage, URL parameters, server actions, quantity changes, or Prisma changes are involved.
+- [x] Review component resets on leaving Review Count or switching counts. Existing summary calculations, table columns, sticky behavior, refresh, return-to-counting, and completion actions are preserved.
+- [x] Isolated browser preview with sample data verified expand/collapse, delayed Apply, numeric validation, AND/OR results, empty results, remove, Clear All, absolute sorting, fresh-visit reset, and wrapping at 390/768/1200 px container widths.
+- [ ] Browser/employee verification on desktop, tablet, and mobile: toggle panel, change draft filters without applying, apply AND/OR combinations, remove conditions, clear, sort both directions, check empty state, and navigate away/back to confirm reset.
+
+Automated checks: `node --test app/features/inventory-counts/utils/review-count-filters.test.js` covers Show Only options, comparisons, AND/OR scope, statuses, missing Shopify quantities, stable/absolute sorting, default resets, and source-data immutability. Inventory adjustments and Shopify writes remain unchanged.

@@ -19,6 +19,10 @@ const numericFields = {
     line.reviewShopifyQuantity == null
       ? null
       : line.countedQuantity - line.reviewShopifyQuantity,
+  absoluteVariance: (line) =>
+    line.reviewShopifyQuantity == null
+      ? null
+      : Math.abs(line.countedQuantity - line.reviewShopifyQuantity),
 };
 
 function compareText(left, right) {

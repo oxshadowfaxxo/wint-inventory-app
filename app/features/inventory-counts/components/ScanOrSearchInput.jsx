@@ -6,6 +6,8 @@ import {
   searchInventoryCountLines,
 } from "../utils/inventory-count-search";
 import styles from "./scan-or-search-input.module.css";
+import { isBarcodeFailure, playErrorSound } from "../../scanner-audio/error-sound";
+import { useAudioUnlock } from "../../scanner-audio/use-audio-unlock";
 
 const RESULT_LIMIT = 10;
 const SCAN_IDLE_MS = 80;
@@ -21,6 +23,7 @@ export function ScanOrSearchInput({
   allowUnknownBarcode = false,
 }) {
   const fetcher = useFetcher();
+  useAudioUnlock();
   const inputRef = useRef(null);
   const currentBarcode = useRef(null);
   const requestWasBusy = useRef(false);
@@ -91,6 +94,7 @@ export function ScanOrSearchInput({
     requestWasBusy.current = false;
     const submittedBarcode = currentBarcode.current;
     currentBarcode.current = null;
+    if (isBarcodeFailure(fetcher.data)) playErrorSound();
     if (fetcher.data?.scan?.line) {
       const line = fetcher.data.scan.line;
       setResult({
@@ -165,6 +169,8 @@ export function ScanOrSearchInput({
       selectLine(visibleMatches[activeIndex]);
     } else {
       setOpen(true);
+      // An explicit unmatched submission is a local lookup failure, not typing.
+      if (matches.length === 0) playErrorSound();
     }
   }
 

@@ -88,6 +88,7 @@ export const action = async ({ request, params }) => {
             error: error.userMessage || error.message,
             barcode,
             scanError: true,
+            barcodeErrorCode: error.code,
             matchingProducts: error.details,
           };
         }
